@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VAST - Smart Shrimp Farm 4.0</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            primary: '#16a34a',
+                            primaryDark: '#15803d',
+                            primaryLight: '#dcfce7',
+                            bg: '#f8fafc',
+                            surface: '#ffffff',
+                            surfaceSoft: '#f1f5f9',
+                            danger: '#ef4444',
+                            warning: '#eab308',
+                            success: '#22c55e',
+                            info: '#3b82f6',
+                        }
+                    },
+                    boxShadow: {
+                        card: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                        cardLg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer components {
+            .card {
+                @apply bg-white rounded-3xl border border-slate-200 shadow-card;
+            }
+            .btn {
+                @apply inline-flex items-center justify-center font-bold rounded-2xl transition-all cursor-pointer active:scale-95;
+            }
+            .btn-primary {
+                @apply bg-brand-primary text-white hover:bg-brand-primaryDark;
+            }
+            .stat-value {
+                @apply text-[clamp(1.5rem,4vw,2.25rem)] font-extrabold tracking-tight;
+            }
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+
+        .animate-pulse-ring::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background-color: inherit;
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            z-index: -1;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+
+<body hx-boost="true" x-data="farmApp()" x-init="initApp()"
+    class="h-screen flex overflow-hidden text-[16px] md:text-[18px] bg-brand-bg text-slate-900 select-none">
+
+    <!-- SIDEBAR (DESKTOP) -->
+    <aside
+        class="hidden md:flex flex-col w-[280px] bg-white border-r border-slate-200 z-20 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+        <div class="h-20 flex items-center px-6 border-b border-slate-100">
+            <img src="logo.png" alt="VAST Logo" class="w-10 h-10 object-contain mr-1">
+            <div>
+                <h1 class="font-bold text-2xl text-green-600 leading-tight uppercase tracking-wider">VAST</h1>
+            </div>
+        </div>
+
+        <nav class="flex-1 overflow-y-auto py-6 px-4 space-y-2 font-medium">
+            <template x-for="item in navItems" :key="item.id">
+                <a href="#" @click.prevent="currentView = item.id; if(item.id === 'dashboard') selectedPondId = null;"
+                    :class="currentView === item.id && !selectedPondId ? 'bg-green-50 text-green-700 font-bold' : 'text-slate-600 hover:bg-slate-50'"
+                    class="flex items-center px-4 py-3.5 rounded-2xl transition-colors">
+                    <i :data-lucide="item.icon" class="w-6 h-6 mr-4"
+                        :class="currentView === item.id ? 'text-green-600' : 'text-slate-400'"></i>
+                    <span x-text="item.label" class="text-[1.1rem]"></span>
+                </a>
+            </template>
+        </nav>
+
+        <div class="p-4 border-t border-slate-100">
+            <div class="bg-slate-50 rounded-xl p-4 flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse mr-2"></div>
+                    <span class="text-sm font-semibold text-slate-600">IoT Connected</span>
+                </div>
+                <i data-lucide="wifi" class="w-4 h-4 text-green-500"></i>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN LAYOUT -->
+    <div class="flex-1 flex flex-col h-full bg-[#f8fafc] relative w-full overflow-hidden">
+
+        <!-- HEADER -->
+        <header
+            class="bg-white/80 backdrop-blur-md sticky top-0 z-10 border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center shadow-sm">
+            <div class="md:hidden flex items-center">
+                <img src="logo.png" alt="VAST Logo" class="w-8 h-8 object-contain mr-1">
+                <h1 class="font-bold text-lg text-green-600 uppercase tracking-wider">VAST</h1>
+            </div>
+
+            <h2 class="hidden md:block text-2xl font-bold text-slate-800" x-text="getPageTitle()"></h2>
+
+            <div class="flex items-center space-x-3 md:space-x-6">
+                <button @click="simulatePhDrop()"
+                    class="bg-red-50 text-red-600 border border-red-200 px-3 md:px-4 py-2 rounded-full font-bold text-sm flex items-center hover:bg-red-100 transition-colors">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 mr-1 md:mr-2"></i>
+                    <span class="hidden md:inline">Demo Tụt pH</span>
+                    <span class="md:hidden">Demo</span>
+                </button>
+
+                <div
+                    class="hidden md:flex items-center bg-slate-100 px-4 py-2 rounded-full text-slate-600 font-semibold text-sm">
+                    <i data-lucide="clock" class="w-4 h-4 mr-2"></i>
+                    <span x-text="currentTime"></span>
+                </div>
+
+                <div class="flex items-center">
+                    <img :src="`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=16a34a&color=fff`"
+                        alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white shadow-sm">
+                    <div class="hidden md:block ml-3">
+                        <p class="text-sm font-bold text-slate-800" x-text="user.name"></p>
+                        <p class="text-xs text-slate-500 font-medium" x-text="user.role"></p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- SCROLLABLE CONTENT -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8 no-scrollbar w-full">
+
+            <!-- ================= VIEW: DASHBOARD ================= -->
+            <div x-show="currentView === 'dashboard' && !selectedPondId" x-transition.opacity.duration.300ms>
+
+                <!-- SMART ALERT AREA -->
+                <template x-if="alerts.length > 0">
+                    <div class="mb-6 animate-bounce" style="animation-iteration-count: 3;">
+                        <div
+                            class="bg-red-600 text-white p-5 md:p-6 rounded-3xl shadow-lg border-2 border-red-400 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div class="absolute inset-0 opacity-10"
+                                style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, #000 10px, #000 20px);">
+                            </div>
+                            <div class="relative z-10 flex items-start md:items-center gap-4">
+                                <div class="bg-white/20 p-3 rounded-2xl">
+                                    <i data-lucide="siren" class="w-8 h-8 text-white"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span
+                                            class="bg-white text-red-600 text-xs font-black px-2 py-1 rounded-md tracking-wider uppercase"
+                                            x-text="alerts[0].title"></span>
+                                        <span class="text-red-100 text-sm font-medium"
+                                            x-text="alerts[0].timestamp"></span>
+                                    </div>
+                                    <h3 class="text-xl md:text-2xl font-bold leading-tight" x-text="alerts[0].message">
+                                    </h3>
+                                    <p
+                                        class="text-red-100 mt-2 font-medium bg-black/20 p-3 rounded-xl border border-red-400/30 flex items-start gap-2">
+                                        <i data-lucide="bot" class="w-5 h-5 shrink-0 text-yellow-300"></i>
+                                        <span x-html="'<b>AI Khuyên:</b> ' + alerts[0].recommendation"></span>
+                                    </p>
+                                </div>
+                            </div>
+                            <button @click="executeAiAction(alerts[0].id)"
+                                class="relative z-10 w-full md:w-auto btn bg-yellow-400 text-yellow-900 hover:bg-yellow-300 py-4 md:py-3 px-6 shadow-xl text-lg md:text-base whitespace-nowrap">
+                                <i data-lucide="zap" class="w-5 h-5 mr-2"></i>
+                                THỰC THI NGAY
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- QUICK ACTIONS -->
+                <div class="mb-8">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">THAO TÁC NHANH</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                        <button @click="startVoiceInput()"
+                            class="card p-4 flex flex-col items-center justify-center gap-3 hover:border-green-500 hover:shadow-md transition-all group active:scale-95 bg-green-50 border-green-200">
+                            <div
+                                class="w-14 h-14 bg-green-600 text-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <i data-lucide="mic" class="w-7 h-7"></i>
+                            </div>
+                            <span class="font-bold text-green-800 text-center text-sm md:text-base">Ghi Nhật
+                                Ký<br>(Giọng Nói)</span>
+                        </button>
+
+                        <button @click="toggleAll('fan')"
+                            class="card p-4 flex flex-col items-center justify-center gap-3 transition-all active:scale-95 border-2 bg-[#fefce8] border-yellow-200 hover:border-yellow-300 shadow-sm">
+                            <div class="w-14 h-14 rounded-full flex items-center justify-center transition-colors bg-white shadow-sm border border-yellow-100"
+                                :class="isAllFansOn() ? 'text-green-600' : 'text-slate-400'">
+                                <i data-lucide="fan" class="w-7 h-7" :class="{'animate-spin': isAllFansOn()}"></i>
+                            </div>
+                            <span class="font-bold text-center text-sm md:text-base text-yellow-800">
+                                Quạt Nước<br>(<span x-text="isAllFansOn() ? 'BẬT' : 'TẮT'"></span> HẾT)
+                            </span>
+                        </button>
+
+                        <button @click="currentView = 'ai'"
+                            class="card p-4 flex flex-col items-center justify-center gap-3 hover:border-blue-400 transition-all active:scale-95 bg-blue-50 border-blue-100">
+                            <div
+                                class="w-14 h-14 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-md">
+                                <i data-lucide="bot" class="w-7 h-7"></i>
+                            </div>
+                            <span class="font-bold text-blue-800 text-center text-sm md:text-base">Hỏi AI<br>Môi
+                                Trường</span>
+                        </button>
+
+                        <button @click="showToast('Tính năng thêm ao đang được phát triển', 'info')"
+                            class="card p-4 flex flex-col items-center justify-center gap-3 hover:border-green-400 transition-all active:scale-95 border-dashed border-2 border-slate-300 bg-slate-50">
+                            <div
+                                class="w-14 h-14 bg-white text-green-600 rounded-full flex items-center justify-center shadow-sm border border-slate-200">
+                                <i data-lucide="plus" class="w-7 h-7"></i>
+                            </div>
+                            <span class="font-bold text-slate-700 text-center text-sm md:text-base">Thêm Ao<br>Nuôi
+                                Tôm</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- POND CARDS GRID -->
+                <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">TRẠNG THÁI CÁC AO</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
+                    <template x-for="pond in ponds" :key="pond.id">
+                        <div class="card p-5 md:p-6 flex flex-col relative overflow-hidden transition-all duration-300"
+                            :class="{ 'border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)] bg-red-50/30': pond.status === 'danger' }">
+                            <div class="flex justify-between items-start mb-6">
+                                <div>
+                                    <h3 class="text-2xl font-black text-slate-800" x-text="pond.name"></h3>
+                                    <div class="mt-2 inline-flex items-center px-3 py-1 rounded-full text-sm font-bold shadow-sm"
+                                        :class="{
+                                            'bg-green-100 text-green-700 border border-green-200': pond.status === 'safe',
+                                            'bg-yellow-100 text-yellow-700 border border-yellow-200': pond.status === 'warning',
+                                            'bg-red-100 text-red-700 border border-red-200 animate-pulse': pond.status === 'danger'
+                                         }">
+                                        <i data-lucide="check-circle-2" class="w-4 h-4 mr-1.5"
+                                            x-show="pond.status === 'safe'"></i>
+                                        <i data-lucide="alert-triangle" class="w-4 h-4 mr-1.5"
+                                            x-show="pond.status !== 'safe'"></i>
+                                        <span
+                                            x-text="pond.status === 'safe' ? 'AN TOÀN' : (pond.status === 'warning' ? 'CHÚ Ý' : 'NGUY HIỂM')"></span>
+                                    </div>
+                                </div>
+                                <div
+                                    class="bg-green-50 p-2 rounded-xl border border-green-100 flex items-center gap-1 text-green-600">
+                                    <i data-lucide="wifi" class="w-4 h-4"></i>
+                                    <span class="text-xs font-bold">ON</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3 mb-6">
+                                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                                    <div class="flex items-center text-slate-500 mb-1">
+                                        <i data-lucide="thermometer" class="w-4 h-4 mr-1"></i>
+                                        <span class="text-xs font-semibold uppercase">Nhiệt độ</span>
+                                    </div>
+                                    <div class="stat-value text-slate-800">
+                                        <span x-text="pond.temperature"></span><span
+                                            class="text-lg text-slate-500 ml-1">°C</span>
+                                    </div>
+                                </div>
+                                <div class="p-3 rounded-2xl border transition-colors duration-300"
+                                    :class="pond.status === 'danger' && pond.ph < 7.5 ? 'bg-red-100 border-red-300' : 'bg-slate-50 border-slate-100'">
+                                    <div class="flex items-center mb-1"
+                                        :class="pond.status === 'danger' && pond.ph < 7.5 ? 'text-red-600' : 'text-slate-500'">
+                                        <i data-lucide="droplets" class="w-4 h-4 mr-1"></i>
+                                        <span class="text-xs font-semibold uppercase">Độ pH</span>
+                                    </div>
+                                    <div class="stat-value"
+                                        :class="pond.status === 'danger' && pond.ph < 7.5 ? 'text-red-700' : 'text-slate-800'">
+                                        <span x-text="pond.ph"></span>
+                                    </div>
+                                </div>
+                                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                                    <div class="flex items-center text-slate-500 mb-1">
+                                        <i data-lucide="activity" class="w-4 h-4 mr-1"></i>
+                                        <span class="text-xs font-semibold uppercase">DO (Oxy)</span>
+                                    </div>
+                                    <div class="stat-value text-slate-800">
+                                        <span x-text="pond.do"></span><span
+                                            class="text-[1rem] text-slate-500 ml-1">mg/L</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div
+                                class="bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-6 grid grid-cols-2 gap-3">
+                                <div class="flex flex-col">
+                                    <span class="text-xs font-bold text-slate-500 uppercase mb-2">Quạt Nước</span>
+                                    <button @click="toggleDevice(pond.id, 'fan')"
+                                        class="flex items-center justify-between p-3 rounded-xl transition-all border-2 active:scale-95"
+                                        :class="pond.fan ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-slate-200 text-slate-400'">
+                                        <i data-lucide="fan" class="w-6 h-6"
+                                            :class="{'animate-spin text-green-600': pond.fan}"></i>
+                                        <span class="font-bold text-lg" x-text="pond.fan ? 'BẬT' : 'TẮT'"></span>
+                                    </button>
+                                </div>
+                                <div class="flex flex-col">
+                                    <span class="text-xs font-bold text-slate-500 uppercase mb-2">Máy Bơm</span>
+                                    <button @click="toggleDevice(pond.id, 'pump')"
+                                        class="flex items-center justify-between p-3 rounded-xl transition-all border-2 active:scale-95"
+                                        :class="pond.pump ? 'bg-blue-100 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-400'">
+                                        <i data-lucide="waves" class="w-6 h-6"
+                                            :class="{'text-blue-600': pond.pump}"></i>
+                                        <span class="font-bold text-lg" x-text="pond.pump ? 'BẬT' : 'TẮT'"></span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Nút mở mục Chi Tiết Ao -->
+                            <button @click="openPondDetail(pond.id)"
+                                class="mt-auto w-full btn btn-primary py-3.5 text-lg shadow-sm border border-green-700/20">
+                                CHI TIẾT AO
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- CHARTS AREA (GENERAL) -->
+                <div class="card p-5 md:p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-slate-800">BIỂU ĐỒ MÔI TRƯỜNG CHUNG</h3>
+                        <div class="bg-slate-100 p-1 rounded-xl flex">
+                            <button
+                                class="px-4 py-1.5 rounded-lg text-sm font-bold bg-white shadow-sm text-slate-800">24
+                                Giờ</button>
+                            <button
+                                class="px-4 py-1.5 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-800">7
+                                Ngày</button>
+                        </div>
+                    </div>
+                    <div class="w-full h-[300px] relative">
+                        <canvas id="envChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: CHI TIẾT AO (POND DETAIL) ================= -->
+            <div x-show="selectedPondId" x-transition.opacity.duration.300ms style="display: none;">
+                <!-- Nút quay lại và Tiêu đề có nút 3 chấm chỉnh sửa tên ao -->
+                <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <button @click="selectedPondId = null"
+                        class="btn bg-white border border-slate-200 px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm font-bold text-sm">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i> Quay lại
+                    </button>
+
+                    <!-- Tiêu đề và nút 3 chấm -->
+                    <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                        <h2 class="text-base sm:text-xl md:text-2xl font-black text-slate-800 tracking-tight truncate"
+                            x-text="selectedPond ? 'CHI TIẾT ' + selectedPond.name.toUpperCase() : ''"></h2>
+
+                        <!-- Nút menu dấu 3 chấm để sửa tên ao -->
+                        <div class="relative" x-data="{ openMenu: false }">
+                            <button @click="openMenu = !openMenu"
+                                class="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                                <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                            </button>
+
+                            <!-- Dropdown menu -->
+                            <div x-show="openMenu" @click.away="openMenu = false" style="display: none;"
+                                class="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-30">
+                                <button @click="openMenu = false; openEditPondModal()"
+                                    class="w-full px-4 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                                    <i data-lucide="edit-3" class="w-4 h-4 text-green-600"></i> Chỉnh sửa tên ao
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. BIỂU ĐỒ MÔI TRƯỜNG (1 Ngày / 7 Ngày / 30 Ngày) -->
+                <div class="card p-5 md:p-6 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                        <h3 class="text-xl font-bold text-slate-800"
+                            x-text="selectedPond ? 'BIỂU ĐỒ MÔI TRƯỜNG (' + selectedPond.name.toUpperCase() + ')' : ''">
+                        </h3>
+                        <!-- Bộ lọc thời gian: 1 Ngày, 7 Ngày, 30 Ngày -->
+                        <div class="bg-slate-100 p-1 rounded-xl flex gap-1">
+                            <button @click="setChartTimeframe('1d')"
+                                :class="chartTimeframe === '1d' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 font-medium'"
+                                class="px-4 py-1.5 rounded-lg text-sm transition-all">1 Ngày</button>
+                            <button @click="setChartTimeframe('7d')"
+                                :class="chartTimeframe === '7d' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 font-medium'"
+                                class="px-4 py-1.5 rounded-lg text-sm transition-all">7 Ngày</button>
+                            <button @click="setChartTimeframe('30d')"
+                                :class="chartTimeframe === '30d' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 font-medium'"
+                                class="px-4 py-1.5 rounded-lg text-sm transition-all">30 Ngày</button>
+                        </div>
+                    </div>
+                    <div class="w-full h-[320px] relative">
+                        <canvas id="pondDetailChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- LƯỚI THÔNG TIN: CẢNH BÁO + NHẬT KÝ + THU HOẠCH -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- 2. CẢNH BÁO HỆ THỐNG GẦN ĐÂY -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i> Cảnh báo gần đây
+                            </h3>
+                            <span
+                                class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Mới</span>
+                        </div>
+                        <div class="space-y-3 flex-1">
+                            <template x-for="alert in getPondAlerts()">
+                                <div class="p-3 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3">
+                                    <i data-lucide="siren" class="w-5 h-5 text-red-500 shrink-0 mt-0.5"></i>
+                                    <div>
+                                        <div class="text-sm font-bold text-red-700" x-text="alert.title"></div>
+                                        <div class="text-xs text-slate-600 mt-1" x-text="alert.message"></div>
+                                        <div class="text-[11px] text-slate-400 mt-1 font-semibold"
+                                            x-text="alert.timestamp"></div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="getPondAlerts().length === 0">
+                                <div class="text-center py-8 text-slate-400 font-medium">Không có cảnh báo nào. Ao nuôi
+                                    đang ổn định! 🟢</div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 3. NHẬT KÝ HOẠT ĐỘNG -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="book" class="w-5 h-5 text-green-600"></i> Nhật ký hoạt động
+                            </h3>
+                            <span class="text-xs bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded-full">Gần
+                                đây</span>
+                        </div>
+                        <div class="space-y-3 flex-1">
+                            <div
+                                class="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold text-xs">
+                                        08:30</div>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-800">Thả 5kg thức ăn số 2</p>
+                                        <p class="text-xs text-slate-500">Ghi nhận bằng giọng nói</p>
+                                    </div>
+                                </div>
+                                <i data-lucide="check-circle-2" class="w-5 h-5 text-green-500"></i>
+                            </div>
+                            <div
+                                class="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <div
+                                        class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
+                                        06:00</div>
+                                    <div>
+                                        <p class="text-sm font-bold text-slate-800">Bật quạt nước tự động</p>
+                                        <p class="text-xs text-slate-500">Hệ thống AI Rule Engine</p>
+                                    </div>
+                                </div>
+                                <i data-lucide="check-circle-2" class="w-5 h-5 text-blue-500"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. DỰ BÁO THU HOẠCH -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="trending-up" class="w-5 h-5 text-blue-600"></i> Dự báo thu hoạch
+                            </h3>
+                            <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">Vụ
+                                1/2026</span>
+                        </div>
+                        <div class="flex-1 flex flex-col justify-center space-y-4">
+                            <div>
+                                <div class="flex justify-between text-sm font-bold text-slate-700 mb-1">
+                                    <span>Tiến độ sinh trưởng</span>
+                                    <span class="text-green-600">75%</span>
+                                </div>
+                                <div
+                                    class="w-full bg-slate-100 h-4 rounded-full overflow-hidden p-0.5 border border-slate-200">
+                                    <div class="bg-green-500 h-full rounded-full" style="width: 75%;"></div>
+                                </div>
+                            </div>
+                            <div
+                                class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                <div>
+                                    <p class="text-xs text-slate-500 font-bold uppercase">Ước tính trọng lượng</p>
+                                    <p class="text-2xl font-black text-slate-800 mt-0.5">12.0 <span
+                                            class="text-sm font-normal text-slate-500">kg/m²</span></p>
+                                </div>
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center">
+                                    <i data-lucide="award" class="w-6 h-6"></i>
+                                </div>
+                            </div>
+                            <p class="text-xs text-slate-500 text-center font-medium">Dự kiến thu hoạch sau 15 ngày nữa
+                                theo đánh giá từ AI Model v2.4.</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ================= VIEW: AI ASSISTANT ================= -->
+            <div x-show="currentView === 'ai' && !selectedPondId" style="display: none;"
+                class="h-full flex flex-col items-center justify-center max-w-2xl mx-auto text-center">
+                <div
+                    class="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+                    <i data-lucide="bot" class="w-10 h-10"></i>
+                </div>
+                <h2 class="text-3xl font-black text-slate-800 mb-4">Trợ Lý Nông Nghiệp AI</h2>
+                <p class="text-lg text-slate-600 mb-12 font-medium px-4">Hãy nhấn nút bên dưới và nói yêu cầu của bạn.
+                    Ví dụ: <i>"Bật quạt ao số 1"</i> hoặc <i>"Ghi nhật ký: Cho ao 2 ăn 5kg thức ăn lúc 8 giờ."</i></p>
+
+                <div class="relative w-40 h-40 flex items-center justify-center">
+                    <div x-show="isRecording" class="absolute inset-0 bg-red-500 rounded-full animate-pulse-ring"></div>
+                    <button @click="toggleRecording()"
+                        class="relative z-10 w-32 h-32 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 active:scale-90"
+                        :class="isRecording ? 'bg-red-500 text-white shadow-red-500/50' : 'bg-green-500 text-white hover:bg-green-600'">
+                        <i data-lucide="mic" class="w-12 h-12" :class="{'animate-pulse': isRecording}"></i>
+                    </button>
+                </div>
+
+                <div class="mt-8 h-20 flex items-center justify-center w-full px-6">
+                    <p x-show="!isRecording && !voiceResult"
+                        class="text-slate-400 font-semibold text-lg uppercase tracking-widest">NHẤN ĐỂ NÓI</p>
+                    <p x-show="isRecording" class="text-red-500 font-bold text-xl animate-pulse">ĐANG LẮNG NGHE...</p>
+
+                    <div x-show="voiceResult && !isRecording"
+                        class="w-full bg-slate-100 p-4 rounded-2xl border border-slate-200">
+                        <p class="text-slate-500 text-sm font-bold mb-1">Bạn vừa nói:</p>
+                        <p class="text-xl font-bold text-slate-800 italic">"<span x-text="voiceResult"></span>"</p>
+                        <div class="mt-4 flex gap-3 justify-center">
+                            <button @click="confirmVoice()" class="btn btn-primary px-6 py-2">XÁC NHẬN</button>
+                            <button @click="voiceResult = ''"
+                                class="btn bg-slate-200 text-slate-700 px-6 py-2">HỦY</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: CÀI ĐẶT ================= -->
+            <div x-show="currentView === 'settings' && !selectedPondId"
+                x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4"
+                x-transition:enter-end="opacity-100 translate-y-0" style="display: none;" class="pb-24 md:pb-8">
+                <div class="w-full">
+                    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 w-full">
+                        <div class="space-y-4">
+                            <button @click="openProfileModal()"
+                                class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all active:scale-95 text-slate-700 font-bold text-left">
+                                <div class="flex items-center gap-3">
+                                    <i data-lucide="user-pen" class="w-5 h-5 text-blue-500"></i>
+                                    <span>Chỉnh sửa hồ sơ</span>
+                                </div>
+                                <i data-lucide="chevron-right" class="w-5 h-5 text-slate-400"></i>
+                            </button>
+
+                            <button @click="logout()"
+                                class="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 rounded-2xl transition-all active:scale-95 text-red-600 font-bold text-left border border-red-100">
+                                <div class="flex items-center gap-3">
+                                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                                    <span>Đăng xuất tài khoản</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- BOTTOM NAVIGATION (MOBILE) -->
+        <nav
+            class="md:hidden fixed bottom-0 w-full bg-white border-t border-slate-100 flex justify-around items-center h-20 pb-4 pt-2 z-50 px-2 shadow-[0_-4px_24px_rgba(0,0,0,0.05)]">
+            <template x-for="item in mobileNavItems" :key="item.id">
+                <button @click="currentView = item.id; selectedPondId = null;"
+                    class="flex flex-col items-center justify-center w-full h-full rounded-xl transition-all"
+                    :class="currentView === item.id && !selectedPondId ? 'text-green-600' : 'text-slate-400 hover:text-slate-600'">
+                    <div class="p-1.5 rounded-full mb-1 transition-all"
+                        :class="currentView === item.id && !selectedPondId ? 'bg-green-100' : 'bg-transparent'">
+                        <div x-html="getIconSVG(item.icon, currentView === item.id && !selectedPondId)"></div>
+                    </div>
+                    <span class="text-[11px] font-bold tracking-wide" x-text="item.label"></span>
+                </button>
+            </template>
+        </nav>
+
+        <!-- TOAST NOTIFICATION -->
+        <div class="fixed top-20 right-4 md:right-8 z-50 flex flex-col gap-2 pointer-events-none">
+            <template x-for="toast in toasts" :key="toast.id">
+                <div x-show="toast.visible" x-transition:enter="transition ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-x-10"
+                    x-transition:enter-end="opacity-100 translate-x-0"
+                    x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="bg-slate-800 text-white px-5 py-4 rounded-2xl shadow-xl flex items-center gap-3 font-semibold pointer-events-auto border border-slate-700 min-w-[280px]">
+                    <i data-lucide="check-circle-2" class="w-6 h-6 text-green-400"
+                        x-show="toast.type === 'success'"></i>
+                    <i data-lucide="info" class="w-6 h-6 text-blue-400" x-show="toast.type === 'info'"></i>
+                    <span x-text="toast.message" class="text-base"></span>
+                </div>
+            </template>
+        </div>
+
+        <!-- MODAL CHỈNH SỬA HỒ SƠ -->
+        <div x-show="showEditProfileModal"
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            style="display: none;">
+            <div @click.away="showEditProfileModal = false" x-transition:enter="transition ease-out duration-300"
+                x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 class="font-bold text-xl text-slate-800">Chỉnh sửa hồ sơ</h3>
+                    <button @click="showEditProfileModal = false"
+                        class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-5">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Tên hiển thị</label>
+                        <input type="text" x-model="editName"
+                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Vai trò (Vị trí)</label>
+                        <input type="text" x-model="editRole"
+                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg">
+                    </div>
+                </div>
+                <div class="p-6 flex gap-4 bg-slate-50">
+                    <button @click="showEditProfileModal = false"
+                        class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95">
+                        Hủy bỏ
+                    </button>
+                    <button @click="saveProfile()"
+                        class="flex-1 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-green-200 active:scale-95">
+                        Lưu thay đổi
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL CHỈNH SỬA TÊN AO -->
+        <div x-show="showEditPondModal"
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            style="display: none;">
+            <div @click.away="showEditPondModal = false" x-transition:enter="transition ease-out duration-300"
+                x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+                class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 class="font-bold text-xl text-slate-800">Đổi tên ao nuôi</h3>
+                    <button @click="showEditPondModal = false"
+                        class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-5">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Tên ao mới</label>
+                        <input type="text" x-model="editPondName"
+                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg"
+                            placeholder="Ví dụ: Ao số 1 (Khu A)">
+                    </div>
+                </div>
+                <div class="p-6 flex gap-4 bg-slate-50">
+                    <button @click="showEditPondModal = false"
+                        class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95">
+                        Hủy bỏ
+                    </button>
+                    <button @click="savePondName()"
+                        class="flex-1 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-green-200 active:scale-95">
+                        Lưu tên mới
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        function farmApp() {
+            return {
+                currentView: 'dashboard',
+                currentTime: '',
+                isRecording: false,
+                voiceResult: '',
+                chartInstance: null,
+                detailChartInstance: null,
+
+                selectedPondId: null,
+                chartTimeframe: '1d', // Mặc định 1 ngày: '1d', '7d', '30d'
+
+                showEditProfileModal: false,
+                editName: '',
+                editRole: '',
+
+                showEditPondModal: false,
+                editPondName: '',
+
+                user: {
+                    name: 'Chú Ba',
+                    role: 'Trại trưởng'
+                },
+
+                toasts: [],
+                alerts: [],
+
+                ponds: [
+                    { id: 'pond_01', name: 'Ao số 1', status: 'safe', temperature: 28.5, ph: 7.8, do: 5.8, fan: true, pump: false },
+                    { id: 'pond_02', name: 'Ao số 2', status: 'safe', temperature: 28.2, ph: 7.6, do: 6.1, fan: true, pump: true },
+                    { id: 'pond_03', name: 'Ao số 3', status: 'warning', temperature: 29.1, ph: 8.2, do: 5.0, fan: false, pump: false }
+                ],
+
+                navItems: [
+                    { id: 'dashboard', label: 'Tổng quan Ao', icon: 'layout-dashboard' },
+                    { id: 'ai', label: 'Trợ lý AI', icon: 'bot' },
+                    { id: 'logs', label: 'Nhật ký', icon: 'clipboard-list' },
+                    { id: 'analytics', label: 'Thống kê', icon: 'bar-chart-2' },
+                    { id: 'settings', label: 'Cài đặt', icon: 'settings' }
+                ],
+                mobileNavItems: [
+                    { id: 'dashboard', label: 'TỔNG QUAN', icon: 'layout-dashboard' },
+                    { id: 'ai', label: 'AI VOICE', icon: 'mic' },
+                    { id: 'logs', label: 'NHẬT KÝ', icon: 'book' },
+                    { id: 'settings', label: 'CÀI ĐẶT', icon: 'settings' }
+                ],
+
+                get selectedPond() {
+                    return this.ponds.find(p => p.id === this.selectedPondId);
+                },
+
+                initApp() {
+                    const savedUser = localStorage.getItem('currentUser');
+                    if (savedUser) {
+                        try {
+                            const parsedUser = JSON.parse(savedUser);
+                            this.user.name = parsedUser.fullName || parsedUser.name || this.user.name;
+                            this.user.role = parsedUser.role || this.user.role;
+                        } catch (e) {
+                            this.user.name = savedUser;
+                        }
+                    }
+
+                    this.updateClock();
+                    setInterval(() => this.updateClock(), 1000);
+
+                    this.$nextTick(() => {
+                        lucide.createIcons();
+                        this.initChart();
+                    });
+
+                    this.$watch('currentView', (value) => {
+                        this.$nextTick(() => {
+                            lucide.createIcons();
+                            if (value === 'dashboard' && !this.selectedPondId && !this.chartInstance) {
+                                this.initChart();
+                            }
+                        });
+                    });
+
+                    // Watch khi mở trang chi tiết ao để render biểu đồ riêng
+                    this.$watch('selectedPondId', (id) => {
+                        if (id) {
+                            this.$nextTick(() => {
+                                lucide.createIcons();
+                                this.initDetailChart();
+                            });
+                        }
+                    });
+
+                    // Watch thay đổi khung thời gian biểu đồ chi tiết
+                    this.$watch('chartTimeframe', () => {
+                        if (this.selectedPondId) {
+                            this.initDetailChart();
+                        }
+                    });
+                },
+
+                openPondDetail(pondId) {
+                    this.selectedPondId = pondId;
+                },
+
+                openEditPondModal() {
+                    if (this.selectedPond) {
+                        this.editPondName = this.selectedPond.name;
+                        this.showEditPondModal = true;
+                    }
+                },
+
+                savePondName() {
+                    if (this.editPondName.trim() === '') {
+                        alert('Vui lòng không để trống tên ao!');
+                        return;
+                    }
+                    if (this.selectedPond) {
+                        this.selectedPond.name = this.editPondName;
+                        this.showEditPondModal = false;
+                        this.showToast('Đã đổi tên ao thành công!');
+                        this.$nextTick(() => lucide.createIcons());
+                    }
+                },
+
+                setChartTimeframe(tf) {
+                    this.chartTimeframe = tf;
+                },
+
+                getPondAlerts() {
+                    return this.alerts.filter(a => a.pondId === this.selectedPondId || !a.pondId);
+                },
+
+                updateClock() {
+                    const now = new Date();
+                    this.currentTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                },
+
+                getPageTitle() {
+                    if (this.selectedPondId && this.selectedPond) {
+                        return 'Chi tiết ' + this.selectedPond.name;
+                    }
+                    const view = this.navItems.find(i => i.id === this.currentView);
+                    return view ? view.label : 'Hệ thống Quản lý';
+                },
+
+                getIconSVG(name, isActive) {
+                    const color = isActive ? '#16a34a' : '#94a3b8';
+                    const icons = {
+                        'layout-dashboard': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>`,
+                        'mic': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`,
+                        'book': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>`,
+                        'settings': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`
+                    };
+                    return icons[name] || '';
+                },
+
+                toggleDevice(pondId, deviceType) {
+                    const pond = this.ponds.find(p => p.id === pondId);
+                    if (pond) {
+                        pond[deviceType] = !pond[deviceType];
+                        const deviceName = deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm';
+                        const statusStr = pond[deviceType] ? 'BẬT' : 'TẮT';
+                        this.showToast(`Đã ${statusStr} ${deviceName} ở ${pond.name}`);
+                    }
+                },
+
+                toggleAll(deviceType) {
+                    const allOn = this.ponds.every(p => p[deviceType]);
+                    this.ponds.forEach(p => p[deviceType] = !allOn);
+                    const deviceName = deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm';
+                    this.showToast(`Đã ${!allOn ? 'BẬT' : 'TẮT'} toàn bộ ${deviceName}`);
+                },
+
+                isAllFansOn() {
+                    return this.ponds.length > 0 && this.ponds.every(p => p.fan);
+                },
+
+                simulatePhDrop() {
+                    this.currentView = 'dashboard';
+                    this.selectedPondId = null;
+                    const targetPond = this.ponds[0];
+                    targetPond.ph = 6.8;
+                    targetPond.status = 'danger';
+
+                    this.alerts = [{
+                        id: 'alert_' + Date.now(),
+                        pondId: 'pond_01',
+                        title: 'CẢNH BÁO MỨC ĐỘ CAO',
+                        message: `Độ pH tại ${targetPond.name} giảm đột ngột xuống 6.8`,
+                        timestamp: new Date().toLocaleTimeString('vi-VN'),
+                        recommendation: 'Bật ngay quạt sục khí công suất cao và thay 10% nước để cân bằng lại môi trường.'
+                    }];
+
+                    this.$nextTick(() => lucide.createIcons());
+                    if (this.chartInstance) {
+                        const phData = this.chartInstance.data.datasets[1].data;
+                        phData[phData.length - 1] = 6.8;
+                        this.chartInstance.update();
+                    }
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                },
+
+                executeAiAction(alertId) {
+                    const targetPond = this.ponds[0];
+                    targetPond.fan = true;
+
+                    setTimeout(() => {
+                        targetPond.ph = 7.6;
+                        targetPond.status = 'safe';
+                        this.alerts = this.alerts.filter(a => a.id !== alertId);
+                        this.showToast("Đã thực thi lệnh AI. Hệ thống đang ổn định lại.", "success");
+                        this.$nextTick(() => lucide.createIcons());
+
+                        if (this.chartInstance) {
+                            const phData = this.chartInstance.data.datasets[1].data;
+                            phData[phData.length - 1] = 7.6;
+                            this.chartInstance.update();
+                        }
+                    }, 1000);
+                },
+
+                startVoiceInput() {
+                    this.currentView = 'ai';
+                    this.selectedPondId = null;
+                    this.toggleRecording();
+                },
+
+                toggleRecording() {
+                    if (this.isRecording) {
+                        this.isRecording = false;
+                        this.voiceResult = "Hôm nay ao số 1 thả 5 ký thức ăn số 2.";
+                    } else {
+                        this.isRecording = true;
+                        this.voiceResult = "";
+                        setTimeout(() => {
+                            if (this.isRecording) this.toggleRecording();
+                        }, 3000);
+                    }
+                },
+
+                confirmVoice() {
+                    this.showToast("Đã lưu nhật ký vào hệ thống thành công!");
+                    this.voiceResult = "";
+                    setTimeout(() => {
+                        this.currentView = 'dashboard';
+                    }, 1000);
+                },
+
+                showToast(message, type = 'success') {
+                    const id = Date.now();
+                    this.toasts.push({ id, message, type, visible: true });
+                    setTimeout(() => {
+                        const toast = this.toasts.find(t => t.id === id);
+                        if (toast) toast.visible = false;
+                    }, 3000);
+                    setTimeout(() => {
+                        this.toasts = this.toasts.filter(t => t.id !== id);
+                    }, 3500);
+                },
+
+                openProfileModal() {
+                    this.editName = this.user.name;
+                    this.editRole = this.user.role;
+                    this.showEditProfileModal = true;
+                },
+
+                saveProfile() {
+                    if (this.editName.trim() === '') {
+                        alert('Vui lòng không để trống tên nhé!');
+                        return;
+                    }
+                    this.user.name = this.editName;
+                    this.user.role = this.editRole;
+
+                    localStorage.setItem('currentUser', JSON.stringify({
+                        name: this.user.name,
+                        role: this.user.role
+                    }));
+
+                    this.showEditProfileModal = false;
+                    this.showToast('Đã cập nhật hồ sơ thành công!');
+                },
+
+                logout() {
+                    if (confirm('Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?')) {
+                        localStorage.removeItem('currentUser');
+                        window.location.href = 'index.html';
+                    }
+                },
+
+                initChart() {
+                    const ctx = document.getElementById('envChart');
+                    if (!ctx) return;
+                    if (this.chartInstance) {
+                        this.chartInstance.destroy();
+                    }
+
+                    Chart.defaults.font.family = "'Inter', sans-serif";
+                    Chart.defaults.color = '#64748b';
+
+                    this.chartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', 'Bây giờ'],
+                            datasets: [
+                                {
+                                    label: 'Nhiệt độ (°C)',
+                                    data: [27.5, 28.0, 29.2, 30.1, 29.8, 28.5, 27.9, 28.5],
+                                    borderColor: '#16a34a',
+                                    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                                    borderWidth: 3,
+                                    tension: 0.4,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Độ pH',
+                                    data: [7.8, 7.8, 7.9, 8.0, 7.9, 7.8, 7.8, 7.8],
+                                    borderColor: '#3b82f6',
+                                    borderWidth: 3,
+                                    tension: 0.4
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    labels: { usePointStyle: true, boxWidth: 8, padding: 20, font: { weight: 'bold', size: 13 } }
+                                },
+                                tooltip: {
+                                    backgroundColor: '#1e293b', titleFont: { size: 14, family: 'Inter' },
+                                    bodyFont: { size: 14, font: 'bold' }, padding: 12, cornerRadius: 12
+                                }
+                            },
+                            scales: {
+                                y: { beginAtZero: false, grid: { color: '#f1f5f9', drawBorder: false } },
+                                x: { grid: { display: false } }
+                            }
+                        }
+                    });
+                },
+
+                initDetailChart() {
+                    const ctx = document.getElementById('pondDetailChart');
+                    if (!ctx) return;
+                    if (this.detailChartInstance) {
+                        this.detailChartInstance.destroy();
+                    }
+
+                    let labels = [];
+                    let tempData = [];
+                    let phData = [];
+
+                    if (this.chartTimeframe === '1d') {
+                        labels = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Bây giờ'];
+                        tempData = [27.0, 26.5, 28.0, 30.2, 29.5, 28.0, 28.5];
+                        phData = [7.6, 7.5, 7.8, 8.1, 7.9, 7.7, 7.8];
+                    } else if (this.chartTimeframe === '7d') {
+                        labels = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
+                        tempData = [28.0, 28.5, 29.0, 28.2, 27.8, 28.6, 28.9];
+                        phData = [7.8, 7.7, 7.9, 8.0, 7.6, 7.8, 7.9];
+                    } else if (this.chartTimeframe === '30d') {
+                        labels = ['Ngày 5', 'Ngày 10', 'Ngày 15', 'Ngày 20', 'Ngày 25', 'Ngày 30'];
+                        tempData = [27.5, 28.2, 29.1, 28.8, 27.9, 28.5];
+                        phData = [7.5, 7.8, 8.2, 7.9, 7.7, 7.8];
+                    }
+
+                    this.detailChartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [
+                                {
+                                    label: 'Nhiệt độ (°C)',
+                                    data: tempData,
+                                    borderColor: '#16a34a',
+                                    backgroundColor: 'rgba(22, 163, 74, 0.1)',
+                                    borderWidth: 3,
+                                    tension: 0.4,
+                                    fill: true
+                                },
+                                {
+                                    label: 'Độ pH',
+                                    data: phData,
+                                    borderColor: '#3b82f6',
+                                    borderWidth: 3,
+                                    tension: 0.4
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                    labels: { usePointStyle: true, boxWidth: 8, padding: 20, font: { weight: 'bold', size: 13 } }
+                                },
+                                tooltip: {
+                                    backgroundColor: '#1e293b', titleFont: { size: 14, family: 'Inter' },
+                                    bodyFont: { size: 14, font: 'bold' }, padding: 12, cornerRadius: 12
+                                }
+                            },
+                            scales: {
+                                y: { beginAtZero: false, grid: { color: '#f1f5f9', drawBorder: false } },
+                                x: { grid: { display: false } }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        document.addEventListener('alpine:init', () => {
+            lucide.createIcons();
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function () {
+            lucide.createIcons();
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng ký - VAST</title>
+
+    <!-- Google Fonts: Be Vietnam Pro -->
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Be Vietnam Pro"', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            bg: '#D8EADF',
+                            surface: '#FFFFFF',
+                            primary: '#2A8B47',
+                            primaryHover: '#227339',
+                            textPrimary: '#2D3748',
+                            textSecondary: '#4A5568',
+                            textMuted: '#718096',
+                            borderColor: '#E2E8F0',
+                        }
+                    },
+                    boxShadow: {
+                        card: '0 10px 40px rgba(0, 0, 0, 0.05)',
+                        btn: '0 8px 20px rgba(42, 139, 71, 0.3)',
+                    },
+                    borderRadius: {
+                        'md': '16px',
+                        'lg': '24px',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body
+    class="font-sans bg-brand-bg text-brand-textPrimary w-full min-h-screen flex items-center justify-center p-4 sm:p-6"
+    hx-boost="true">
+
+    <div class="bg-brand-surface p-8 sm:p-10 rounded-lg shadow-card w-full max-w-[500px] mx-auto">
+
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div class="flex items-center justify-center mb-4">
+                <img src="logo.png" alt="VAST" class="h-[60px] w-auto object-contain">
+            </div>
+            <h1 class="text-2xl font-bold mb-2">Tạo Tài Khoản Mới</h1>
+            <p class="text-brand-textSecondary text-base">Bắt đầu quản lý ao tôm thông minh</p>
+        </div>
+
+        <!-- Form đăng ký -->
+        <!-- x-data để lưu trữ dữ liệu form và xử lý ẩn/hiện mật khẩu -->
+        <form x-data="{ 
+                fullName: '', 
+                phone: '', 
+                password: '',
+                showPassword: false,
+                
+                // Hàm giả lập đăng ký thành công và lưu tên vào localStorage
+                registerUser() {
+                    if(this.fullName && this.phone && this.password) {
+                        localStorage.setItem('currentUser', JSON.stringify({
+                            name: this.fullName,
+                            role: 'Trại trưởng',
+                            phone: this.phone
+                        }));
+                        window.location.href = 'dashboard.html';
+                    }
+                }
+            }" @submit.prevent="registerUser()">
+
+            <!-- Input Họ và Tên -->
+            <div class="mb-5">
+                <label class="block font-semibold text-base mb-2">Họ và Tên</label>
+                <div class="relative flex items-center">
+                    <i data-lucide="user" class="absolute left-4 text-brand-textMuted w-5 h-5"></i>
+                    <input type="text" x-model="fullName"
+                        class="w-full py-4 pr-4 pl-12 border-2 border-brand-borderColor rounded-md text-base transition-colors focus:border-brand-primary focus:outline-none bg-slate-50"
+                        placeholder="Ví dụ: Nguyễn Văn A" required>
+                </div>
+            </div>
+
+            <!-- Input Số điện thoại -->
+            <div class="mb-5">
+                <label class="block font-semibold text-base mb-2">Số điện thoại</label>
+                <div class="relative flex items-center">
+                    <i data-lucide="phone" class="absolute left-4 text-brand-textMuted w-5 h-5"></i>
+                    <input type="tel" x-model="phone"
+                        class="w-full py-4 pr-4 pl-12 border-2 border-brand-borderColor rounded-md text-base transition-colors focus:border-brand-primary focus:outline-none bg-slate-50"
+                        placeholder="Sẽ dùng để đăng nhập" required>
+                </div>
+            </div>
+
+            <!-- Input Mật khẩu -->
+            <div class="mb-5">
+                <label class="block font-semibold text-base mb-2">Tạo mật khẩu</label>
+                <div class="relative flex items-center">
+                    <i data-lucide="lock" class="absolute left-4 text-brand-textMuted w-5 h-5"></i>
+                    <input :type="showPassword ? 'text' : 'password'" x-model="password"
+                        class="w-full py-4 pr-12 pl-12 border-2 border-brand-borderColor rounded-md text-base transition-colors focus:border-brand-primary focus:outline-none bg-slate-50"
+                        placeholder="Mật khẩu từ 6 ký tự" required minlength="6">
+
+                    <!-- Nút Toggle Password -->
+                    <button type="button"
+                        class="absolute right-4 text-brand-textMuted p-1 cursor-pointer hover:text-brand-textPrimary transition-colors"
+                        @click="showPassword = !showPassword; $nextTick(() => lucide.createIcons())">
+                        <template x-if="!showPassword">
+                            <i data-lucide="eye" class="w-5 h-5"></i>
+                        </template>
+                        <template x-if="showPassword">
+                            <i data-lucide="eye-off" class="w-5 h-5"></i>
+                        </template>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button type="submit"
+                class="w-full p-4 mt-3 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-full text-[18px] font-bold flex justify-center items-center gap-2 shadow-btn transition-transform duration-300 active:scale-95">
+                Đăng Ký Tài Khoản
+            </button>
+        </form>
+
+        <!-- Đăng nhập -->
+        <div class="text-center text-brand-textSecondary text-base font-medium mt-6">
+            Đã có tài khoản? <a href="login.html" class="text-brand-primary font-bold hover:underline">Đăng nhập</a>
+        </div>
+    </div>
+
+    <!-- Khởi tạo Icon Lucide -->
+    <script>
+        document.addEventListener('alpine:init', () => {
+            lucide.createIcons();
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function () {
+            lucide.createIcons();
+        });
+
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
