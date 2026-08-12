@@ -1,0 +1,67 @@
+<!-- ================= VIEW: AI ASSISTANT ================= -->
+<div x-show="currentView === 'ai' && !selectedPondId" style="display: none;"
+    class="h-full flex flex-col items-center justify-center w-full max-w-7xl mx-auto text-center relative pt-10">
+    <!-- Nút 3 gạch xem lịch sử lệnh AI -->
+    <button @click="showAILogsModal = true"
+        class="absolute top-0 right-2 md:right-0 p-3 bg-white border border-slate-200 shadow-sm text-slate-600 hover:bg-slate-50 rounded-xl transition-colors z-10 active:scale-95 flex items-center gap-2">
+        <i data-lucide="menu" class="w-5 h-5"></i>
+        <span class="text-sm font-bold hidden sm:inline">Lịch sử lệnh</span>
+    </button>
+
+    <div class="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+        <i data-lucide="bot" class="w-10 h-10"></i>
+    </div>
+    <h2 class="text-3xl font-black text-slate-800 mb-3">Trợ Lý Nông Nghiệp AI</h2>
+    <p class="text-base md:text-lg text-slate-500 mb-10 font-medium px-4 max-w-md">
+        AI hỗ trợ quản lý ao nuôi, các hoạt động sẽ được lưu trong <b>Nhật ký hoạt động</b> của từng ao
+        nuôi.
+    </p>
+
+    <!-- KHU VỰC THAO TÁC (MICRO + TEXT) -->
+    <div class="w-full px-4 max-w-md bg-white p-6 rounded-3xl border border-slate-100 shadow-lg">
+        <!-- Nút Micro to giữa màn hình -->
+        <div class="relative w-32 h-32 flex items-center justify-center mx-auto mb-8 mt-2">
+            <div x-show="isRecording" class="absolute inset-0 bg-green-500 rounded-full animate-pulse-ring">
+            </div>
+            <button @click="toggleRecording()"
+                class="relative z-10 w-24 h-24 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 active:scale-90"
+                :class="isRecording ? 'bg-red-500 text-white shadow-red-500/50' : 'bg-green-500 text-white hover:bg-green-600'">
+                <i data-lucide="mic" class="w-10 h-10" :class="{'animate-pulse': isRecording}"></i>
+            </button>
+        </div>
+
+        <p x-show="isRecording" class="text-red-500 font-bold text-lg animate-pulse mb-4">ĐANG LẮNG NGHE...
+        </p>
+
+        <!-- Kết quả Voice -->
+        <div x-show="voiceResult && !isRecording"
+            class="w-full bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-4 text-left">
+            <p class="text-slate-400 text-xs font-bold uppercase mb-1">Giọng nói nhận diện:</p>
+            <p class="text-lg font-bold text-slate-800 italic">"<span x-text="voiceResult"></span>"</p>
+            <div class="mt-4 flex gap-2">
+                <button @click="submitAILog(voiceResult)" class="flex-1 btn btn-primary py-2.5 shadow-sm text-sm">GHI
+                    VÀO NHẬT KÝ</button>
+                <button @click="voiceResult = ''"
+                    class="w-12 bg-slate-200 text-slate-600 rounded-xl flex items-center justify-center"><i
+                        data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+        </div>
+
+        <div class="relative flex items-center my-4" x-show="!voiceResult">
+            <div class="flex-grow border-t border-slate-200"></div>
+            <span class="flex-shrink-0 mx-4 text-slate-400 text-sm font-bold">HOẶC NHẬP PHÍM</span>
+            <div class="flex-grow border-t border-slate-200"></div>
+        </div>
+
+        <!-- Ô nhập văn bản -->
+        <div class="flex gap-2" x-show="!voiceResult">
+            <input type="text" x-model="aiTextInput" @keydown.enter="submitAILog(aiTextInput)"
+                placeholder="Ví dụ: Cho ao 1 ăn 5kg lúc 8h..."
+                class="flex-1 w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 font-medium text-slate-700">
+            <button @click="submitAILog(aiTextInput)"
+                class="w-12 h-12 shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center transition-colors active:scale-95 shadow-md">
+                <i data-lucide="send" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </div>
+</div>

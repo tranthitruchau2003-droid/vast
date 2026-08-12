@@ -1,0 +1,117 @@
+<!-- ================= VIEW: SỔ SÁCH (THU CHI) ================= -->
+<div x-show="currentView === 'logs' && !selectedPondId" style="display: none;" x-transition.opacity.duration.300ms
+    class="w-full max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="wallet"
+                class="text-blue-600"></i> SỔ SÁCH THU CHI</h2>
+        <!-- Nút 3 gạch mở modal thống kê -->
+        <button @click="openFinanceModal()"
+            class="p-2 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 flex items-center gap-2 active:scale-95">
+            <i data-lucide="menu" class="w-5 h-5 text-slate-600"></i>
+            <span class="hidden sm:inline font-bold text-sm text-slate-700">Thống kê & Xuất Excel</span>
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <!-- FORM NHẬP THU CHI -->
+        <div class="card p-5 md:p-6 bg-white">
+            <div class="flex bg-slate-100 p-1 rounded-xl mb-6">
+                <button @click="financeType = 'chi'"
+                    :class="financeType === 'chi' ? 'bg-white text-red-600 shadow-sm font-bold' : 'text-slate-500 font-medium'"
+                    class="flex-1 py-2 text-sm rounded-lg transition-all text-center">GHI CHI</button>
+                <button @click="financeType = 'thu'"
+                    :class="financeType === 'thu' ? 'bg-white text-green-600 shadow-sm font-bold' : 'text-slate-500 font-medium'"
+                    class="flex-1 py-2 text-sm rounded-lg transition-all text-center">GHI THU</button>
+            </div>
+
+            <div class="space-y-4">
+                <!-- Số tiền -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Số tiền (VNĐ) <span
+                            class="text-red-500">*</span></label>
+                    <input type="text" x-model="financeAmount" @input="formatCurrency()" placeholder="0"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-black text-2xl text-right text-slate-800 transition-colors">
+                </div>
+                <!-- Danh mục -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Danh mục <span
+                            class="text-red-500">*</span></label>
+                    <select x-model="financeCategory"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-800 appearance-none">
+                        <template x-if="financeType === 'chi'">
+                            <optgroup label="Khoản chi">
+                                <option>Thức ăn</option>
+                                <option>Thuốc men</option>
+                                <option>Con giống</option>
+                                <option>Tiền điện</option>
+                                <option>Thiết bị</option>
+                                <option>Khác</option>
+                            </optgroup>
+                        </template>
+                        <template x-if="financeType === 'thu'">
+                            <optgroup label="Khoản thu">
+                                <option>Bán tôm</option>
+                                <option>Thu khác</option>
+                            </optgroup>
+                        </template>
+                    </select>
+                </div>
+                <!-- Ngày & Ghi chú -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Ngày giao dịch</label>
+                        <input type="date" x-model="financeDate"
+                            class="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-700 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Ghi chú (Tùy
+                            chọn)</label>
+                        <input type="text" x-model="financeNote" placeholder="Ví dụ: Mua cám cty A"
+                            class="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-slate-700 text-sm">
+                    </div>
+                </div>
+
+                <button @click="saveTransaction()"
+                    class="w-full py-4 text-white font-bold rounded-xl text-lg mt-2 transition-all active:scale-95 shadow-md"
+                    :class="financeType === 'chi' ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'">
+                    LƯU GIAO DỊCH
+                </button>
+            </div>
+        </div>
+
+        <!-- LỊCH SỬ GẦN ĐÂY MÀN SỔ SÁCH -->
+        <div class="card p-5 md:p-6 bg-slate-50/50 flex flex-col h-full">
+            <h3 class="font-bold text-lg text-slate-800 mb-4 border-b border-slate-200 pb-2">Giao dịch gần
+                đây</h3>
+            <div class="space-y-3 flex-1">
+                <template x-for="txn in transactions.slice().reverse().slice(0, 5)" :key="txn.id">
+                    <div
+                        class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
+                                :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
+                                <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
+                                    class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-slate-800" x-text="txn.category"></p>
+                                <p class="text-[11px] text-slate-500 font-medium"
+                                    x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
+                            </div>
+                        </div>
+                        <p class="font-black text-right" :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
+                            x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+                    </div>
+                </template>
+                <template x-if="transactions.length === 0">
+                    <div class="text-center py-8 text-slate-400 font-medium text-sm">Chưa có giao dịch nào
+                        được lưu.</div>
+                </template>
+            </div>
+            <button @click="showAllTransactionsModal = true"
+                class="w-full mt-4 py-2 text-blue-600 font-bold text-sm bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">
+                Xem tất cả giao dịch
+            </button>
+        </div>
+    </div>
+</div>
