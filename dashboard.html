@@ -338,44 +338,8 @@
             </template>
         </div>
 
-        <!-- MODAL CHỈNH SỬA HỒ SƠ -->
-        <div x-show="showEditProfileModal"
-            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-            style="display: none;">
-            <div @click.away="showEditProfileModal = false" x-transition:enter="transition ease-out duration-300"
-                x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
-                class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
-                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 class="font-bold text-xl text-slate-800">Chỉnh sửa hồ sơ</h3>
-                    <button @click="showEditProfileModal = false"
-                        class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
-                        <i data-lucide="x" class="w-5 h-5"></i>
-                    </button>
-                </div>
-                <div class="p-6 space-y-5">
-                    <div>
-                        <label class="block text-sm font-bold text-slate-600 mb-2">Tên hiển thị</label>
-                        <input type="text" x-model="editName"
-                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-slate-600 mb-2">Vai trò (Vị trí)</label>
-                        <input type="text" x-model="editRole"
-                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg">
-                    </div>
-                </div>
-                <div class="p-6 flex gap-4 bg-slate-50">
-                    <button @click="showEditProfileModal = false"
-                        class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95">
-                        Hủy bỏ
-                    </button>
-                    <button @click="saveProfile()"
-                        class="flex-1 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-green-200 active:scale-95">
-                        Lưu thay đổi
-                    </button>
-                </div>
-            </div>
-        </div>
+
+
 
         <!-- MODAL CHỈNH SỬA THÔNG TIN AO -->
         <div x-show="showEditPondModal"
@@ -476,15 +440,19 @@
                                     data-lucide="map-pin" class="w-4 h-4"></i> Thông tin vùng nuôi</h4>
                             <p class="text-sm text-slate-700 mt-1"><b>Mã số ao nuôi:</b> <span
                                     x-text="selectedPond?.name"></span></p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Hộ nông dân:</b> Hợp tác xã Tôm sạch VAST</p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Tọa độ GPS:</b> 9°10'33.2"N 105°43'21.1"E</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Hộ nông dân:</b> Hợp tác xã Tôm sạch VAST
+                            </p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Tọa độ GPS:</b> 9°10'33.2"N 105°43'21.1"E
+                            </p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                             <h4 class="text-sm font-bold text-amber-600 mb-2 flex items-center gap-2"><i
                                     data-lucide="package-search" class="w-4 h-4"></i> Thông tin đầu vào</h4>
-                            <p class="text-sm text-slate-700 mt-1"><b>Nguồn giống:</b> Công ty CP Giống Thủy Sản (Lô
+                            <p class="text-sm text-slate-700 mt-1"><b>Nguồn giống:</b> Công ty CP Giống Thủy Sản
+                                (Lô
                                 G-882)</p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Thức ăn & Xử lý:</b> Cám tiêu chuẩn số 2, Vi sinh
+                            <p class="text-sm text-slate-700 mt-1"><b>Thức ăn & Xử lý:</b> Cám tiêu chuẩn số 2,
+                                Vi sinh
                                 VAST-Bio</p>
                         </div>
                         <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
@@ -492,7 +460,8 @@
                                     data-lucide="clipboard-check" class="w-4 h-4"></i> Quá trình chăm sóc</h4>
                             <p class="text-sm text-slate-700 mt-1"><b>Ngày thả:</b> <span
                                     x-text="formatDate(selectedPond?.stockingDate)"></span></p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Ngừng thuốc:</b> 15 ngày trước thu hoạch</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Ngừng thuốc:</b> 15 ngày trước thu hoạch
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -527,6 +496,61 @@
                 <button @click="confirmDeletePond()"
                     class="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-200 active:scale-95">
                     Xác nhận xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CHỈNH SỬA HỒ SƠ -->
+    <div x-show="showEditProfileModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showEditProfileModal = false" x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="font-bold text-xl text-slate-800">Chỉnh sửa hồ sơ</h3>
+                <button @click="showEditProfileModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-5">
+                <!-- KHỐI CHỌN AVATAR -->
+                <div class="flex flex-col items-center mb-2">
+                    <div class="relative w-24 h-24 mb-3">
+                        <!-- Ảnh Preview -->
+                        <img :src="editAvatar || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(editName || user.name)}&background=16a34a&color=fff`"
+                            alt="Avatar Preview"
+                            class="w-full h-full rounded-full border-4 border-slate-100 object-cover shadow-sm">
+
+                        <!-- Nút tải ảnh -->
+                        <label for="avatarUpload"
+                            class="absolute bottom-0 right-0 bg-white text-blue-600 p-2 rounded-full shadow-md border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                            <i data-lucide="camera" class="w-4 h-4"></i>
+                        </label>
+                        <input type="file" id="avatarUpload" accept="image/*" class="hidden"
+                            @change="handleAvatarUpload">
+                    </div>
+                    <span class="text-xs text-slate-500 font-medium">Nhấn vào icon camera để đổi ảnh</span>
+                </div>
+
+                <!-- Ô NHẬP TÊN HIỂN THỊ (Đã bỏ Vai trò) -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-2">Tên hiển thị</label>
+                    <input type="text" x-model="editName"
+                        class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg"
+                        placeholder="Nhập tên hiển thị">
+                </div>
+            </div>
+            <div class="p-6 flex gap-4 bg-slate-50">
+                <button @click="showEditProfileModal = false"
+                    class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95">
+                    Hủy bỏ
+                </button>
+                <button @click="saveProfile()"
+                    class="flex-1 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-green-200 active:scale-95">
+                    Lưu thay đổi
                 </button>
             </div>
         </div>
@@ -672,7 +696,8 @@
                 </div>
 
                 <div class="flex justify-between border-b border-slate-100 pb-4 mb-6">
-                    <p class="text-center text-sm font-bold text-slate-600 flex-1 border-r border-slate-100">Tổng thu:
+                    <p class="text-center text-sm font-bold text-slate-600 flex-1 border-r border-slate-100">
+                        Tổng thu:
                         <br><span class="text-green-600 text-lg font-black"
                             x-text="formatNumber(totalIncome) + ' đ'"></span>
                     </p>
@@ -785,7 +810,8 @@
                 // Biến trạng thái Modal
                 showEditProfileModal: false,
                 editName: '',
-                editRole: '',
+
+                editAvatar: '',
                 showEditPondModal: false,
                 showDeleteConfirmModal: false,
                 showLogoutConfirmModal: false,
@@ -824,7 +850,7 @@
                     { id: 102, time: '16:00', date: '08/08/2026', content: 'Hệ thống tự động bật quạt sục khí xử lý pH thấp ở Ao số 1', targetPond: 'Ao số 1' }
                 ],
 
-                user: { name: 'Chú Ba', role: 'Trại trưởng' },
+                user: { name: 'Chú Ba', role: 'Trại trưởng', avatar: '' },
                 toasts: [],
                 alerts: [],
 
@@ -853,8 +879,9 @@
                     if (savedUser) {
                         try {
                             const parsed = JSON.parse(savedUser);
-                            this.user.name = parsed.fullName || parsed.name || this.user.name;
+                            this.user.name = parsed.name || this.user.name;
                             this.user.role = parsed.role || this.user.role;
+                            this.user.avatar = parsed.avatar || ''; // Thêm dòng này để load ảnh
                         } catch (e) { this.user.name = savedUser; }
                     }
                     this.updateClock(); setInterval(() => this.updateClock(), 1000);
@@ -944,29 +971,50 @@
                     this.showToast('Đã tải báo cáo Excel thành công!', 'success');
                 },
                 openProfileModal() {
-                    // Lấy dữ liệu hiện tại gán vào form trước khi mở
+                    // Tự động lấy tên người dùng từ lúc Đăng ký
                     this.editName = this.user.name;
-                    this.editRole = this.user.role;
+                    this.editAvatar = this.user.avatar || '';
                     this.showEditProfileModal = true;
+                },
+
+                // Hàm đọc file ảnh thành định dạng Base64 để hiển thị & lưu
+                handleAvatarUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.editAvatar = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
                 },
 
                 saveProfile() {
                     if (this.editName.trim() === '') {
-                        alert('Vui lòng không để trống tên nhé!');
+                        this.errorMessage = 'Vui lòng không để trống tên nhé!';
+                        this.showErrorModal = true;
                         return;
                     }
-                    // Cập nhật dữ liệu mới
+
+                    // Cập nhật dữ liệu mới lên giao diện
                     this.user.name = this.editName;
-                    this.user.role = this.editRole;
+                    this.user.avatar = this.editAvatar;
 
-                    // Lưu vào bộ nhớ trình duyệt
-                    localStorage.setItem('currentUser', JSON.stringify({
-                        name: this.user.name,
-                        role: this.user.role
-                    }));
+                    // Giữ lại các thông tin cũ (như Số điện thoại, Vai trò) và chỉ đè Tên/Ảnh mới lên
+                    let currentData = {};
+                    try {
+                        currentData = JSON.parse(localStorage.getItem('currentUser')) || {};
+                    } catch (e) { }
 
-                    this.showEditProfileModal = false; // Đóng modal
+                    currentData.name = this.user.name;
+                    currentData.avatar = this.user.avatar;
+
+                    // Lưu vào bộ nhớ máy để tải lại trang không bị mất
+                    localStorage.setItem('currentUser', JSON.stringify(currentData));
+
+                    this.showEditProfileModal = false;
                     this.showToast('Đã cập nhật hồ sơ thành công!', 'success');
+                    this.$nextTick(() => lucide.createIcons());
                 },
                 // ---- XỬ LÝ AI & NHẬT KÝ ----
                 submitAILog(text) {

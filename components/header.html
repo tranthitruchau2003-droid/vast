@@ -60,12 +60,16 @@
             <span x-text="currentTime"></span>
         </div>
 
-        <div class="flex items-center">
-            <img :src="`https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=16a34a&color=fff`"
-                alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white shadow-sm">
+        <!-- Click vào đây để mở Modal Hồ sơ -->
+        <div class="flex items-center cursor-pointer hover:bg-slate-50 p-2 -mr-2 rounded-xl transition-colors"
+            @click="openProfileModal()">
+            <!-- Hiển thị ảnh avatar từ bộ nhớ hoặc ảnh mặc định -->
+            <img :src="user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=16a34a&color=fff`"
+                alt="Avatar" class="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover">
             <div class="hidden md:block ml-3">
+                <!-- Lấy tên từ dữ liệu đăng ký -->
                 <p class="text-sm font-bold text-slate-800" x-text="user.name"></p>
-                <p class="text-xs text-slate-500 font-medium" x-text="user.role"></p>
+                <!-- <p class="text-xs text-slate-500 font-medium" x-text="user.role"></p> -->
             </div>
         </div>
     </div>
