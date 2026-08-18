@@ -38,6 +38,22 @@
         </div>
     </template>
 
+    <!-- ===== BANNER: KHONG KET NOI DUOC BACKEND ===== -->
+    <template x-if="!iot.serverOk && iot.ready === false">
+        <div
+            class="mb-6 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-start gap-3 text-amber-800">
+            <i data-lucide="server-off" class="w-5 h-5 shrink-0 mt-0.5"></i>
+            <div class="text-sm">
+                <p class="font-black">CHƯA KẾT NỐI ĐƯỢC MÁY CHỦ IoT</p>
+                <p class="text-xs font-medium mt-1">
+                    Hãy chạy backend: mở thư mục <b>server</b> rồi gõ <b>node server.js</b>,
+                    sau đó mở lại trang bằng <b>http://localhost:3000/dashboard.html</b>.
+                    Các ao demo vẫn hoạt động bình thường.
+                </p>
+            </div>
+        </div>
+    </template>
+
     <!-- QUICK ACTIONS -->
     <div class="mb-8">
         <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">THAO TÁC NHANH</h3>
@@ -105,12 +121,52 @@
                                 x-text="pond.status === 'safe' ? 'AN TOÀN' : (pond.status === 'warning' ? 'CHÚ Ý' : 'NGUY HIỂM')"></span>
                         </div>
                     </div>
-                    <div
-                        class="bg-green-50 p-2 rounded-xl border border-green-100 flex items-center gap-1 text-green-600">
-                        <i data-lucide="wifi" class="w-4 h-4"></i>
-                        <span class="text-xs font-bold">ON</span>
-                    </div>
+                    <!-- ===== TRANG THAI KET NOI ESP32 (that) ===== -->
+                    <template x-if="hasIot(pond)">
+                        <div class="flex flex-col items-end gap-1.5">
+                            <div class="p-2 rounded-xl border flex items-center gap-1"
+                                :class="pond.iot.online ? 'bg-green-50 border-green-100 text-green-600' : 'bg-red-50 border-red-200 text-red-600'">
+                                <i :data-lucide="pond.iot.online ? 'wifi' : 'wifi-off'" class="w-4 h-4"></i>
+                                <span class="text-xs font-bold" x-text="pond.iot.online ? 'ONLINE' : 'OFFLINE'"></span>
+                            </div>
+
+                            <!-- BAO CHE DO CAP NHAT - de biet trinh duyet da nap code moi chua.
+                                 REALTIME (xanh)  = server day du lieu xuong tuc thi
+                                 Hoi lai (vang)   = dang chay kieu cu, hoi 2 giay/lan -->
+                            <span
+                                class="text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1 border"
+                                :class="iot.streamOk ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200'">
+                                <i :data-lucide="iot.streamOk ? 'zap' : 'refresh-cw'" class="w-3 h-3"></i>
+                                <span x-text="iot.streamOk ? 'REALTIME' : 'HỎI LẠI 2 GIÂY'"></span>
+                            </span>
+                        </div>
+                    </template>
+                    <!-- Ao demo chua gan thiet bi -->
+                    <template x-if="!hasIot(pond)">
+                        <div
+                            class="bg-slate-50 p-2 rounded-xl border border-slate-200 flex items-center gap-1 text-slate-400">
+                            <i data-lucide="wifi-off" class="w-4 h-4"></i>
+                            <span class="text-xs font-bold">DEMO</span>
+                        </div>
+                    </template>
                 </div>
+
+                <!-- ===== BANG BAO MAT KET NOI ===== -->
+                <template x-if="hasIot(pond) && !pond.iot.online">
+                    <div
+                        class="mb-4 bg-red-50 border-2 border-red-200 rounded-2xl p-3 flex items-start gap-3 text-red-700">
+                        <i data-lucide="plug-zap" class="w-5 h-5 shrink-0 mt-0.5"></i>
+                        <div class="text-sm">
+                            <p class="font-black">ESP32 MẤT KẾT NỐI</p>
+                            <p class="text-xs font-medium mt-0.5">
+                                Số liệu bên dưới là lần cập nhật cuối lúc
+                                <b x-text="iotLastUpdate(pond)"></b>
+                                (<span x-text="iotAgoText(pond)"></span>).
+                                Chế độ AUTO vẫn đang chạy trực tiếp trên thiết bị.
+                            </p>
+                        </div>
+                    </div>
+                </template>
 
                 <div class="grid grid-cols-2 gap-3 mb-6">
                     <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100">
@@ -133,6 +189,12 @@
                             :class="pond.status === 'danger' && pond.ph < 7.5 ? 'text-red-700' : 'text-slate-800'">
                             <span x-text="pond.ph"></span>
                         </div>
+                        <!-- pH CHUA GAN CAM BIEN THAT (se dung GPIO34 sau nay) -->
+                        <template x-if="hasIot(pond) && !pond.iot.ph_connected">
+                            <p class="text-[10px] font-bold text-amber-600 mt-1 leading-tight">
+                                Chưa kết nối cảm biến<br><span class="text-slate-400 font-medium">(số demo)</span>
+                            </p>
+                        </template>
                     </div>
                     <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100">
                         <div class="flex items-center text-slate-500 mb-1">
@@ -145,24 +207,107 @@
                     </div>
                 </div>
 
+                <!-- ===== ĐIỆN NĂNG INA219 (dữ liệu thật) ===== -->
+                <template x-if="hasIot(pond)">
+                    <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                                <i data-lucide="zap" class="w-4 h-4 text-amber-500"></i> Điện năng (INA219)
+                            </span>
+                            <span class="text-[10px] font-bold text-slate-400" x-text="iotWifiText(pond)"></span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-white rounded-xl border border-slate-100 py-2">
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Điện áp</p>
+                                <p class="text-base font-black text-slate-800"
+                                    x-text="iotNum(pond.iot.voltage, 2, 'V')"></p>
+                            </div>
+                            <div class="bg-white rounded-xl border border-slate-100 py-2">
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Dòng</p>
+                                <p class="text-base font-black text-slate-800"
+                                    x-text="iotNum(pond.iot.current_ma, 0, 'mA')"></p>
+                            </div>
+                            <div class="bg-white rounded-xl border border-slate-100 py-2">
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Công suất</p>
+                                <p class="text-base font-black text-slate-800"
+                                    x-text="iotNum(pond.iot.power_w, 2, 'W')"></p>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-slate-400 font-semibold mt-2 text-center">
+                            Cập nhật lúc <b class="text-slate-600" x-text="iotLastUpdate(pond)"></b>
+                            (<span x-text="iotAgoText(pond)"></span>)
+                        </p>
+                    </div>
+                </template>
+
+                <!-- ===== CHỌN CHẾ ĐỘ AUTO / MANUAL (dữ liệu thật) ===== -->
+                <template x-if="hasIot(pond)">
+                    <div class="mb-4">
+                        <span class="text-xs font-bold text-slate-500 uppercase mb-2 block">Chế độ điều khiển</span>
+                        <div class="bg-slate-100 p-1 rounded-xl flex gap-1">
+                            <button @click="iotSetMode(pond.id, 'AUTO')" :disabled="!pond.iot.online"
+                                class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                                :class="pond.iot.mode === 'AUTO' ? 'bg-green-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'">
+                                <i data-lucide="cpu" class="w-4 h-4"></i> AUTO
+                            </button>
+                            <button @click="iotSetMode(pond.id, 'MANUAL')" :disabled="!pond.iot.online"
+                                class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-1.5"
+                                :class="pond.iot.mode === 'MANUAL' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'">
+                                <i data-lucide="hand" class="w-4 h-4"></i> MANUAL
+                            </button>
+                        </div>
+
+                        <!-- Đang chờ ESP32 xác nhận đổi chế độ -->
+                        <template x-if="iotPending(pond.id, 'mode')">
+                            <p class="text-[11px] font-bold text-blue-600 mt-2 flex items-center gap-1 animate-pulse">
+                                <i data-lucide="loader" class="w-3.5 h-3.5"></i> Đang chờ ESP32 xác nhận đổi chế độ...
+                            </p>
+                        </template>
+
+                        <!-- Giải thích khi đang AUTO -->
+                        <template x-if="pond.iot.mode === 'AUTO' && !iotPending(pond.id, 'mode')">
+                            <p
+                                class="text-[11px] font-semibold text-green-700 bg-green-50 border border-green-100 rounded-xl px-3 py-2 mt-2 flex items-start gap-1.5">
+                                <i data-lucide="shield-check" class="w-4 h-4 shrink-0 mt-px"></i>
+                                <span>ESP32 đang <b>tự điều khiển</b>: DO &lt; 5.0 bật guồng oxy, nhiệt độ &gt; 32°C bật
+                                    máy bơm. Nút bật/tắt tay bị khoá.</span>
+                            </p>
+                        </template>
+                    </div>
+                </template>
+
                 <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-6 grid grid-cols-2 gap-3">
                     <div class="flex flex-col">
-                        <span class="text-xs font-bold text-slate-500 uppercase mb-2">Quạt Nước</span>
+                        <span class="text-xs font-bold text-slate-500 uppercase mb-2">
+                            <span x-text="hasIot(pond) ? 'Guồng Oxy (GPIO26)' : 'Quạt Nước'"></span>
+                        </span>
                         <button @click="toggleDevice(pond.id, 'fan')"
-                            class="flex items-center justify-between p-3 rounded-xl transition-all border-2 active:scale-95"
+                            :disabled="hasIot(pond) && (pond.iot.mode === 'AUTO' || !pond.iot.online || iotPending(pond.id,'aerator'))"
+                            class="flex items-center justify-between p-3 rounded-xl transition-all border-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                             :class="pond.fan ? 'bg-green-100 border-green-500 text-green-700' : 'bg-white border-slate-200 text-slate-400'">
                             <i data-lucide="fan" class="w-6 h-6" :class="{'animate-spin text-green-600': pond.fan}"></i>
-                            <span class="font-bold text-lg" x-text="pond.fan ? 'BẬT' : 'TẮT'"></span>
+                            <span class="font-bold text-lg"
+                                x-text="iotPending(pond.id,'aerator') ? '...' : (pond.fan ? 'BẬT' : 'TẮT')"></span>
                         </button>
+                        <template x-if="iotPending(pond.id, 'aerator')">
+                            <p class="text-[10px] font-bold text-blue-600 mt-1 animate-pulse">Đang chờ thiết bị...</p>
+                        </template>
                     </div>
                     <div class="flex flex-col">
-                        <span class="text-xs font-bold text-slate-500 uppercase mb-2">Máy Bơm</span>
+                        <span class="text-xs font-bold text-slate-500 uppercase mb-2">
+                            <span x-text="hasIot(pond) ? 'Máy Bơm (GPIO27)' : 'Máy Bơm'"></span>
+                        </span>
                         <button @click="toggleDevice(pond.id, 'pump')"
-                            class="flex items-center justify-between p-3 rounded-xl transition-all border-2 active:scale-95"
+                            :disabled="hasIot(pond) && (pond.iot.mode === 'AUTO' || !pond.iot.online || iotPending(pond.id,'pump'))"
+                            class="flex items-center justify-between p-3 rounded-xl transition-all border-2 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                             :class="pond.pump ? 'bg-blue-100 border-blue-500 text-blue-700' : 'bg-white border-slate-200 text-slate-400'">
                             <i data-lucide="waves" class="w-6 h-6" :class="{'text-blue-600': pond.pump}"></i>
-                            <span class="font-bold text-lg" x-text="pond.pump ? 'BẬT' : 'TẮT'"></span>
+                            <span class="font-bold text-lg"
+                                x-text="iotPending(pond.id,'pump') ? '...' : (pond.pump ? 'BẬT' : 'TẮT')"></span>
                         </button>
+                        <template x-if="iotPending(pond.id, 'pump')">
+                            <p class="text-[10px] font-bold text-blue-600 mt-1 animate-pulse">Đang chờ thiết bị...</p>
+                        </template>
                     </div>
                 </div>
 

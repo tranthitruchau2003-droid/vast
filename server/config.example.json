@@ -1,0 +1,16 @@
+{
+  "port": 3000,
+  "deviceOfflineSeconds": 20,
+  "historySampleSeconds": 30,
+  "thresholds": {
+    "doOn": 5.0,
+    "doOff": 5.5,
+    "tempPumpOn": 32.0,
+    "tempPumpOff": 31.5
+  },
+  "currentAlarm": {
+    "enabled": false,
+    "maxCurrentMa": 3000,
+    "minRunningMa": 50
+  }
+}

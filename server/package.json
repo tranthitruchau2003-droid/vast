@@ -1,0 +1,18 @@
+{
+  "name": "vast-iot-server",
+  "version": "1.0.0",
+  "description": "Backend IoT cho VAST (Vietnam AI Smart Tracking): nhan telemetry ESP32, phat lenh dieu khien, phuc vu website hien co. KHONG CAN npm install - chi dung module co san cua Node.js.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "seed:reset": "node seed.js --reset",
+    "simulate": "node simulate_esp32.js"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}

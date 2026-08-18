@@ -19,6 +19,12 @@
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+    <!-- ===== KET NOI ESP32 THAT (them moi - khong anh huong phan cu) =====
+         So ?v= phia sau la de ep trinh duyet nap ban MOI, khong dung ban cu
+         trong bo nho dem. Moi lan sua js/iot.js hay doi so nay len 1 don vi. -->
+    <script src="js/vast-config.js?v=5"></script>
+    <script src="js/iot.js?v=5"></script>
+
     <script>
         tailwind.config = {
             theme: {
@@ -795,14 +801,19 @@
     <script>
         function farmApp() {
             return {
+                // ===== GAN MODULE KET NOI ESP32 THAT (js/iot.js) =====
+                // Dat o dau de cac thuoc tinh ben duoi van uu tien neu trung ten.
+                ...iotModule(),
+
                 currentView: 'dashboard',
                 currentTime: '',
                 isRecording: false,
                 voiceResult: '',
                 aiTextInput: '',
-                chartInstance: null,
-                detailChartInstance: null,
-                financeChartInstance: null,
+                // LUU Y: KHONG dat doi tuong Chart vao day nua.
+                // Alpine boc Proxy len moi thuoc tinh, lam Chart.js goi update()
+                // khong ve lai duoc. Bieu do gio giu trong js/iot.js,
+                // truy cap qua iotGetChart('overview' | 'detail' | 'finance').
 
                 selectedPondId: null,
                 chartTimeframe: '1d',
@@ -886,6 +897,11 @@
                     }
                     this.updateClock(); setInterval(() => this.updateClock(), 1000);
                     this.$nextTick(() => { lucide.createIcons(); this.initChart(); });
+
+                    // ===== BAT DAU LAY DU LIEU THAT TU ESP32 =====
+                    this.initIot();
+                    // Ve lai icon sau moi lan du lieu IoT lam thay doi giao dien
+                    setInterval(() => lucide.createIcons(), 2000);
 
                     this.$watch('currentView', (val) => {
                         this.$nextTick(() => {
@@ -1111,7 +1127,10 @@
                     const parts = dateStr.split('-');
                     return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
                 },
-                setChartTimeframe(tf) { this.chartTimeframe = tf; },
+                setChartTimeframe(tf) {
+                    this.chartTimeframe = tf;
+                    this.$nextTick(() => this.initDetailChart());   // ve lai voi khoang thoi gian moi
+                },
                 getPondAlerts() { return this.alerts.filter(a => a.pondId === this.selectedPondId || !a.pondId); },
                 updateClock() { const now = new Date(); this.currentTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); },
                 getPageTitle() {
@@ -1131,15 +1150,42 @@
                 },
                 toggleDevice(pondId, deviceType) {
                     const pond = this.ponds.find(p => p.id === pondId);
-                    if (pond) {
-                        pond[deviceType] = !pond[deviceType];
-                        this.showToast(`Đã ${pond[deviceType] ? 'BẬT' : 'TẮT'} ${deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm'} ở ${pond.name}`);
+                    if (!pond) return;
+
+                    // ===== AO CO GAN ESP32 THAT =====
+                    // Gui lenh xuong thiet bi, KHONG tu doi nut tren giao dien.
+                    // Nut chi doi khi ESP32 gui trang thai that ve (xem js/iot.js).
+                    if (this.hasIot(pond)) {
+                        const which = deviceType === 'fan' ? 'aerator' : 'pump';
+                        this.iotSetDevice(pondId, which, !pond[deviceType]);
+                        return;
                     }
+
+                    // ===== AO DEMO (chua gan thiet bi) - giu nguyen hanh vi cu =====
+                    pond[deviceType] = !pond[deviceType];
+                    this.showToast(`Đã ${pond[deviceType] ? 'BẬT' : 'TẮT'} ${deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm'} ở ${pond.name}`);
                 },
                 toggleAll(deviceType) {
                     const allOn = this.ponds.every(p => p[deviceType]);
-                    this.ponds.forEach(p => p[deviceType] = !allOn);
-                    this.showToast(`Đã ${!allOn ? 'BẬT' : 'TẮT'} toàn bộ ${deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm'}`);
+
+                    this.ponds.forEach(p => {
+                        if (this.hasIot(p)) {
+                            // Ao that: gui lenh (chi co tac dung khi ao do dang MANUAL)
+                            const d = this.iot.byPond[p.id];
+                            if (d && d.mode === 'MANUAL') {
+                                this.iotSetDevice(p.id, deviceType === 'fan' ? 'aerator' : 'pump', !allOn);
+                            }
+                        } else {
+                            p[deviceType] = !allOn;   // ao demo
+                        }
+                    });
+
+                    const anyAuto = this.ponds.some(p => this.hasIot(p) && this.iot.byPond[p.id].mode === 'AUTO');
+                    if (anyAuto) {
+                        this.showToast('Mot so ao dang o che do AUTO - ESP32 tu dieu khien, khong nhan lenh tay.', 'info');
+                    } else {
+                        this.showToast(`Đã gửi lệnh ${!allOn ? 'BẬT' : 'TẮT'} toàn bộ ${deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm'}`);
+                    }
                 },
                 isAllFansOn() { return this.ponds.length > 0 && this.ponds.every(p => p.fan); },
 
@@ -1155,9 +1201,10 @@
                         recommendation: 'Bật ngay quạt sục khí công suất cao và thay 10% nước để cân bằng lại môi trường.'
                     }];
                     this.$nextTick(() => lucide.createIcons());
-                    if (this.chartInstance) {
-                        const phData = this.chartInstance.data.datasets[1].data;
-                        phData[phData.length - 1] = 6.8; this.chartInstance.update();
+                    const bd = this.iotGetChart('overview');
+                    if (bd) {
+                        const phData = bd.data.datasets[1].data;
+                        phData[phData.length - 1] = 6.8; bd.update();
                     }
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 },
@@ -1169,9 +1216,10 @@
                         this.alerts = this.alerts.filter(a => a.id !== alertId);
                         this.showToast("Đã thực thi lệnh AI. Hệ thống đang ổn định lại.", "success");
                         this.submitAILog(`Hệ thống tự động bật quạt sục khí xử lý pH thấp ở ${targetPond.name}`);
-                        if (this.chartInstance) {
-                            const phData = this.chartInstance.data.datasets[1].data;
-                            phData[phData.length - 1] = 7.6; this.chartInstance.update();
+                        const bd2 = this.iotGetChart('overview');
+                        if (bd2) {
+                            const phData = bd2.data.datasets[1].data;
+                            phData[phData.length - 1] = 7.6; bd2.update();
                         }
                     }, 1000);
                 },
@@ -1193,7 +1241,7 @@
                 initFinanceChart() {
                     const ctx = document.getElementById('financePieChart');
                     if (!ctx) return;
-                    if (this.financeChartInstance) this.financeChartInstance.destroy();
+                    
 
                     // 1. Lọc giao dịch CHI theo Timeframe
                     let filteredTxns = this.transactions.filter(t => t.type === 'chi');
@@ -1233,7 +1281,7 @@
                         backgroundColors.unshift('#e2e8f0');
                     }
 
-                    this.financeChartInstance = new Chart(ctx, {
+                    this.iotSetChart('finance', new Chart(ctx, {
                         type: 'doughnut',
                         data: {
                             labels: labels,
@@ -1258,47 +1306,71 @@
                                 }
                             }
                         }
-                    });
+                    }));
                 },
 
-                initChart() {
+                async initChart() {
                     const ctx = document.getElementById('envChart'); if (!ctx) return;
-                    if (this.chartInstance) this.chartInstance.destroy();
+                    
                     Chart.defaults.font.family = "'Inter', sans-serif"; Chart.defaults.color = '#64748b';
-                    this.chartInstance = new Chart(ctx, {
+
+                    // ===== DU LIEU MAC DINH (khi chua ao nao gan ESP32) =====
+                    let labels = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', 'Bây giờ'];
+                    let datasets = [
+                        { label: 'Nhiệt độ (°C)', data: [27.5, 28.0, 29.2, 30.1, 29.8, 28.5, 27.9, 28.5], yAxisID: 'yTemp', borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.08)', borderWidth: 3, tension: 0.35, fill: true },
+                        { label: 'Độ pH', data: [7.8, 7.8, 7.9, 8.0, 7.9, 7.8, 7.8, 7.8], yAxisID: 'yDo', borderColor: '#3b82f6', borderWidth: 3, tension: 0.35 }
+                    ];
+
+                    // ===== DU LIEU THAT tu ao dau tien co gan ESP32 =====
+                    const pond = this.ponds.find(p => this.iot.byPond[p.id]);
+                    if (pond) {
+                        const real = await this.iotChartData(pond.id, '1d');
+                        if (real) { labels = real.labels; datasets = real.datasets; }
+                    }
+
+                    this.iotSetChart('overview', new Chart(ctx, {
                         type: 'line',
-                        data: {
-                            labels: ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', 'Bây giờ'],
-                            datasets: [
-                                { label: 'Nhiệt độ (°C)', data: [27.5, 28.0, 29.2, 30.1, 29.8, 28.5, 27.9, 28.5], borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.1)', borderWidth: 3, tension: 0.4, fill: true },
-                                { label: 'Độ pH', data: [7.8, 7.8, 7.9, 8.0, 7.9, 7.8, 7.8, 7.8], borderColor: '#3b82f6', borderWidth: 3, tension: 0.4 }
-                            ]
-                        },
-                        options: {
-                            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                            plugins: { legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8, padding: 20, font: { weight: 'bold', size: 13 } } } },
-                            scales: { y: { beginAtZero: false, grid: { color: '#f1f5f9', drawBorder: false } }, x: { grid: { display: false } } }
-                        }
-                    });
+                        data: { labels, datasets },
+                        options: this.iotChartOptions()
+                    }));
                 },
-                initDetailChart() {
+                async initDetailChart() {
                     const ctx = document.getElementById('pondDetailChart'); if (!ctx) return;
-                    if (this.detailChartInstance) this.detailChartInstance.destroy();
-                    this.detailChartInstance = new Chart(ctx, {
+                    
+
+                    // ===== DU LIEU MAC DINH (ao demo chua gan ESP32) =====
+                    let labels = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Bây giờ'];
+                    let datasets = [
+                        { label: 'Nhiệt độ (°C)', data: [27.0, 26.5, 28.0, 30.2, 29.5, 28.0, 28.5], yAxisID: 'yTemp', borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.08)', borderWidth: 3, tension: 0.35, fill: true },
+                        { label: 'Độ pH', data: [7.6, 7.5, 7.8, 8.1, 7.9, 7.7, 7.8], yAxisID: 'yDo', borderColor: '#3b82f6', borderWidth: 3, tension: 0.35 }
+                    ];
+
+                    // ===== LICH SU THAT TU ESP32 =====
+                    const pond = this.selectedPond;
+                    const real = pond ? await this.iotChartData(pond.id, this.chartTimeframe) : null;
+                    if (real) { labels = real.labels; datasets = real.datasets; }
+
+                    this.iotSetChart('detail', new Chart(ctx, {
                         type: 'line',
-                        data: {
-                            labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Bây giờ'],
-                            datasets: [
-                                { label: 'Nhiệt độ (°C)', data: [27.0, 26.5, 28.0, 30.2, 29.5, 28.0, 28.5], borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.1)', borderWidth: 3, tension: 0.4, fill: true },
-                                { label: 'Độ pH', data: [7.6, 7.5, 7.8, 8.1, 7.9, 7.7, 7.8], borderColor: '#3b82f6', borderWidth: 3, tension: 0.4 }
-                            ]
-                        },
-                        options: {
-                            responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                            plugins: { legend: { position: 'top' } },
-                            scales: { y: { beginAtZero: false, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } }
-                        }
-                    });
+                        data: { labels, datasets },
+                        options: this.iotChartOptions()
+                    }));
+                },
+
+                /* Cap nhat bieu do CHI TIET AO theo thoi gian thuc (moi 3 giay) */
+                async refreshDetailChart() {
+                    if (!this.iotGetChart('detail') || !this.selectedPondId) return;
+                    const data = await this.iotChartData(this.selectedPondId, this.chartTimeframe);
+                    this.iotApplyChartData(this.iotGetChart('detail'), data);
+                },
+
+                /* Cap nhat bieu do TONG QUAN theo thoi gian thuc (moi 3 giay) */
+                async refreshOverviewChart() {
+                    if (!this.iotGetChart('overview')) return;
+                    const pond = this.ponds.find(p => this.iot.byPond[p.id]);
+                    if (!pond) return;                     // chua ao nao gan ESP32 -> giu bieu do demo
+                    const data = await this.iotChartData(pond.id, '1d');
+                    this.iotApplyChartData(this.iotGetChart('overview'), data);
                 }
             }
         }
