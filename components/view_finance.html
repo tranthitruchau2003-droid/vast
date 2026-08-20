@@ -109,26 +109,29 @@
                 <template x-for="txn in transactions.slice().reverse().slice(0, 5)" :key="txn.id">
                     <div
                         class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
-                        <div class="flex items-center gap-3">
+                        <!-- CỘT TRÁI: Dùng flex-1 min-w-0 để tự động thu hẹp và thêm dấu ... nếu ghi chú quá dài -->
+                        <div class="flex items-center gap-3 flex-1 min-w-0 mr-2">
                             <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0"
                                 :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
                                 <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
                                     class="w-5 h-5"></i>
                             </div>
-                            <div>
-                                <p class="font-bold text-slate-800" x-text="txn.category"></p>
-                                <p class="text-[11px] text-slate-500 font-medium truncate w-32 md:w-40"
+                            <div class="flex-1 min-w-0">
+                                <p class="font-bold text-slate-800 truncate" x-text="txn.category"></p>
+                                <p class="text-[11px] text-slate-500 font-medium truncate"
                                     x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-1">
-                            <p class="font-black text-right"
+
+                        <!-- CỘT PHẢI: Dùng shrink-0 và whitespace-nowrap để bảo vệ số tiền không bị ép rớt dòng -->
+                        <div class="flex items-center gap-1 shrink-0">
+                            <p class="font-black text-right whitespace-nowrap text-sm sm:text-base"
                                 :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
                                 x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
 
-                            <!-- NÚT 3 CHẤM MỚI THÊM VÀO ĐÂY -->
+                            <!-- Nút 3 chấm -->
                             <button @click="openEditTransaction(txn)"
-                                class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95">
+                                class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95 shrink-0">
                                 <i data-lucide="more-vertical" class="w-5 h-5"></i>
                             </button>
                         </div>

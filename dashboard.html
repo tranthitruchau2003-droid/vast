@@ -720,22 +720,33 @@
             <div class="p-6 flex-1 overflow-y-auto no-scrollbar space-y-3 bg-white">
                 <template x-for="txn in transactions.slice().reverse()" :key="txn.id">
                     <div
-                        class="p-4 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold"
+                        class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
+                        <!-- CỘT TRÁI: Dùng flex-1 min-w-0 để tự động thu hẹp và thêm dấu ... nếu ghi chú quá dài -->
+                        <div class="flex items-center gap-3 flex-1 min-w-0 mr-2">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0"
                                 :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
                                 <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
-                                    class="w-6 h-6"></i>
+                                    class="w-5 h-5"></i>
                             </div>
-                            <div>
-                                <p class="font-bold text-slate-800 text-base" x-text="txn.category"></p>
-                                <p class="text-xs text-slate-500 font-medium mt-0.5"
+                            <div class="flex-1 min-w-0">
+                                <p class="font-bold text-slate-800 truncate" x-text="txn.category"></p>
+                                <p class="text-[11px] text-slate-500 font-medium truncate"
                                     x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
                             </div>
                         </div>
-                        <p class="font-black text-right text-lg tracking-tight"
-                            :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
-                            x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+
+                        <!-- CỘT PHẢI: Dùng shrink-0 và whitespace-nowrap để bảo vệ số tiền không bị ép rớt dòng -->
+                        <div class="flex items-center gap-1 shrink-0">
+                            <p class="font-black text-right whitespace-nowrap text-sm sm:text-base"
+                                :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
+                                x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+
+                            <!-- Nút 3 chấm -->
+                            <button @click="openEditTransaction(txn)"
+                                class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95 shrink-0">
+                                <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                            </button>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -1104,6 +1115,12 @@
                         </template>
                     </select>
                 </div>
+                <!-- Ô Ghi chú mới thêm -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Ghi chú (Tùy chọn)</label>
+                    <input type="text" x-model="editTxnNote" placeholder="Ví dụ: Mua cám cty A"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-slate-800">
+                </div>
             </div>
             <div class="p-5 flex gap-3 bg-slate-50 border-t border-slate-100">
                 <button @click="showEditTransactionModal = false"
@@ -1174,6 +1191,7 @@
                 editTxnCategory: '',
                 editTxnAmount: '',
                 editTxnType: 'chi',
+                editTxnNote: '',
                 // ...
                 // Biến trạng thái Modal
                 showErrorModal: false, // Biến bật/tắt pop-up lỗi
@@ -1322,6 +1340,7 @@
                     this.editTxnCategory = txn.category;
                     this.editTxnAmount = txn.amountFormatted;
                     this.editTxnType = txn.type;
+                    this.editTxnNote = txn.note || '';
                     this.showEditTransactionModal = true;
                     this.$nextTick(() => lucide.createIcons());
                 },
@@ -1343,6 +1362,7 @@
                         this.transactions[index].category = this.editTxnCategory;
                         this.transactions[index].amountFormatted = this.editTxnAmount;
                         this.transactions[index].amount = rawAmount;
+                        this.transactions[index].note = this.editTxnNote;
                     }
 
                     this.showEditTransactionModal = false;
