@@ -1,0 +1,1888 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VAST - Smart Shrimp Farm 4.0</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- ===== KET NOI ESP32 THAT (them moi - khong anh huong phan cu) =====
+         So ?v= phia sau la de ep trinh duyet nap ban MOI, khong dung ban cu
+         trong bo nho dem. Moi lan sua js/iot.js hay doi so nay len 1 don vi. -->
+    <script src="js/vast-config.js?v=5"></script>
+    <script src="js/iot.js?v=5"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            primary: '#16a34a',
+                            primaryDark: '#15803d',
+                            primaryLight: '#dcfce7',
+                            bg: '#f8fafc',
+                            surface: '#ffffff',
+                            surfaceSoft: '#f1f5f9',
+                            danger: '#ef4444',
+                            warning: '#eab308',
+                            success: '#22c55e',
+                            info: '#3b82f6',
+                        }
+                    },
+                    boxShadow: {
+                        card: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                        cardLg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer components {
+            .card {
+                @apply bg-white rounded-3xl border border-slate-200 shadow-card;
+            }
+            .btn {
+                @apply inline-flex items-center justify-center font-bold rounded-2xl transition-all cursor-pointer active:scale-95;
+            }
+            .btn-primary {
+                @apply bg-brand-primary text-white hover:bg-brand-primaryDark;
+            }
+            .stat-value {
+                @apply text-[clamp(1.5rem,4vw,2.25rem)] font-extrabold tracking-tight;
+            }
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+
+        .animate-pulse-ring::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background-color: inherit;
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+            z-index: -1;
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+
+<body hx-boost="true" x-data="farmApp()" x-init="initApp()"
+    class="h-[100dvh] flex overflow-hidden text-[16px] md:text-[18px] bg-brand-bg text-slate-900 select-none">
+
+
+    <div hx-get="components/sidebar.html" hx-trigger="load" hx-swap="outerHTML"></div>
+    <!-- MAIN LAYOUT -->
+    <div class="flex-1 flex flex-col h-full bg-[#f8fafc] relative w-full overflow-hidden">
+        <div hx-get="components/header.html" hx-trigger="load" hx-swap="outerHTML"></div>
+
+
+        <!-- SCROLLABLE CONTENT -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-8 pb-32 md:pb-8 no-scrollbar w-full">
+
+            <div hx-get="components/view_overview.html" hx-trigger="load" hx-swap="outerHTML"></div>
+            <div hx-get="components/view_ai.html" hx-trigger="load" hx-swap="outerHTML"></div>
+            <div hx-get="components/view_finance.html" hx-trigger="load" hx-swap="outerHTML"></div>
+            <div hx-get="components/view_settings.html" hx-trigger="load" hx-swap="outerHTML"></div>
+            <div hx-get="components/view_market.html" hx-trigger="load" hx-swap="outerHTML"></div>
+
+            <!-- ================= VIEW: CHI TIẾT AO (POND DETAIL) ================= -->
+            <div x-show="selectedPondId" x-transition.opacity.duration.300ms style="display: none;">
+                <!-- Nút quay lại và Tiêu đề có nút 3 chấm chỉnh sửa tên ao -->
+                <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <button @click="selectedPondId = null"
+                        class="btn bg-white border border-slate-200 px-4 py-2 text-slate-700 hover:bg-slate-50 flex items-center gap-2 shadow-sm font-bold text-sm">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i> Quay lại
+                    </button>
+
+                    <!-- Tiêu đề và nút 3 chấm -->
+                    <!-- Tiêu đề, nút QR và nút 3 chấm -->
+                    <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                        <h2 class="text-base sm:text-xl md:text-2xl font-black text-slate-800 tracking-tight truncate"
+                            x-text="selectedPond ? 'CHI TIẾT ' + selectedPond.name.toUpperCase() : ''"></h2>
+
+                        <div class="flex items-center gap-2">
+                            <!-- Nút Trích xuất QR -->
+                            <button @click="showQRModal = true"
+                                class="px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-blue-100 transition-colors shadow-sm">
+                                <i data-lucide="qr-code" class="w-4 h-4"></i>
+                                <span class="hidden sm:inline">Xuất QR</span>
+                            </button>
+
+                            <!-- Nút menu dấu 3 chấm -->
+                            <div class="relative" x-data="{ openMenu: false }">
+                                <button @click="openMenu = !openMenu"
+                                    class="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                                    <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                                </button>
+                                <!-- Dropdown menu -->
+                                <div x-show="openMenu" @click.away="openMenu = false" style="display: none;"
+                                    class="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-30">
+                                    <button @click="openMenu = false; openEditPondModal()"
+                                        class="w-full px-4 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
+                                        <i data-lucide="edit-3" class="w-4 h-4 text-green-600"></i> Sửa thông tin ao
+                                    </button>
+                                    <button @click="openMenu = false; showDeleteConfirmModal = true"
+                                        class="w-full px-4 py-2.5 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i> Xóa ao
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. BIỂU ĐỒ MÔI TRƯỜNG (1 Ngày / 7 Ngày / 30 Ngày) -->
+                <div class="card p-5 md:p-6 mb-6">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                        <h3 class="text-xl font-bold text-slate-800"
+                            x-text="selectedPond ? 'BIỂU ĐỒ MÔI TRƯỜNG (' + selectedPond.name.toUpperCase() + ')' : ''">
+                        </h3>
+                        <!-- Bộ lọc thời gian: 1 Ngày, 7 Ngày, 30 Ngày -->
+                        <div class="bg-slate-100 p-1 rounded-xl flex gap-1">
+                            <button @click="setChartTimeframe('1d')"
+                                :class="chartTimeframe === '1d' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 font-medium'"
+                                class="px-4 py-1.5 rounded-lg text-sm transition-all">1 Ngày</button>
+                            <button @click="setChartTimeframe('7d')"
+                                :class="chartTimeframe === '7d' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 font-medium'"
+                                class="px-4 py-1.5 rounded-lg text-sm transition-all">7 Ngày</button>
+                            <button @click="setChartTimeframe('30d')"
+                                :class="chartTimeframe === '30d' ? 'bg-white shadow-sm text-slate-800 font-bold' : 'text-slate-500 font-medium'"
+                                class="px-4 py-1.5 rounded-lg text-sm transition-all">30 Ngày</button>
+                        </div>
+                    </div>
+                    <div class="w-full h-[320px] relative">
+                        <canvas id="pondDetailChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- LƯỚI THÔNG TIN: CẢNH BÁO + MÁY CHO ĂN + NHẬT KÝ + THU HOẠCH -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+
+                    <!-- 2. CẢNH BÁO HỆ THỐNG GẦN ĐÂY -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i> Cảnh báo gần đây
+                            </h3>
+                            <span
+                                class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Mới</span>
+                        </div>
+                        <div class="space-y-3 flex-1">
+                            <template x-for="alert in getPondAlerts()">
+                                <div class="p-3 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3">
+                                    <i data-lucide="siren" class="w-5 h-5 text-red-500 shrink-0 mt-0.5"></i>
+                                    <div>
+                                        <div class="text-sm font-bold text-red-700" x-text="alert.title"></div>
+                                        <div class="text-xs text-slate-600 mt-1" x-text="alert.message"></div>
+                                        <div class="text-[11px] text-slate-400 mt-1 font-semibold"
+                                            x-text="alert.timestamp"></div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="getPondAlerts().length === 0">
+                                <div class="text-center py-8 text-slate-400 font-medium">Không có cảnh báo nào. Ao nuôi
+                                    đang ổn định!</div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 3. TRẠNG THÁI MÁY CHO ĂN (THÊM MỚI THEO YÊU CẦU) -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="cpu" class="w-5 h-5 text-amber-500"></i> Máy cho ăn
+                            </h3>
+                            <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Tự động
+                                AI</span>
+                        </div>
+
+                        <div class="flex-1 flex flex-col space-y-4 justify-between">
+                            <!-- Thanh tiến trình lượng cám -->
+                            <div>
+                                <div class="flex justify-between items-center text-sm font-bold text-slate-700 mb-1.5">
+                                    <span>Lượng cám tồn kho</span>
+                                    <span class="text-amber-600">33%</span>
+                                </div>
+                                <div
+                                    class="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200 mb-1.5 shadow-inner">
+                                    <!-- Độ dài thanh chạy (width) tương ứng với % cám còn lại -->
+                                    <div class="bg-amber-500 h-full rounded-full transition-all duration-500"
+                                        style="width: 33%;"></div>
+                                </div>
+                                <p class="text-xs text-slate-500 font-medium text-right">Còn <span
+                                        class="font-bold text-slate-700">5kg</span> / 15kg</p>
+                            </div>
+
+                            <div class="space-y-3">
+                                <!-- Đồng hồ đếm ngược -->
+                                <div
+                                    class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center gap-3">
+                                    <div
+                                        class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-sm">
+                                        <i data-lucide="timer" class="w-5 h-5"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Cữ ăn
+                                            tiếp theo sau</p>
+                                        <p class="text-base font-black text-slate-800 mt-0.5">01 giờ 45 phút</p>
+                                    </div>
+                                </div>
+
+                                <!-- Dự kiến lượng xả -->
+                                <div
+                                    class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center gap-3">
+                                    <div
+                                        class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0 shadow-sm">
+                                        <i data-lucide="scale" class="w-5 h-5"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Dự tính
+                                            AI xả cữ tới</p>
+                                        <p class="text-base font-black text-slate-800 mt-0.5">7.5 <span
+                                                class="text-sm font-semibold text-slate-500">kg</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. NHẬT KÝ HOẠT ĐỘNG -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="book" class="w-5 h-5 text-green-600"></i> Nhật ký hoạt động
+                            </h3>
+                            <span class="text-xs bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded-full">Tự động
+                                AI</span>
+                        </div>
+                        <div class="space-y-3 flex-1 overflow-y-auto max-h-64">
+                            <template x-for="log in getPondLogs(selectedPond?.name)" :key="log.id">
+                                <div
+                                    class="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div
+                                            class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex flex-col items-center justify-center font-bold">
+                                            <span class="text-xs leading-none" x-text="log.time"></span>
+                                        </div>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-800" x-text="log.content"></p>
+                                            <p class="text-[11px] text-slate-500 font-medium mt-0.5"
+                                                x-text="'Ghi nhận: ' + log.date + ' bởi Trợ lý AI'"></p>
+                                        </div>
+                                    </div>
+                                    <i data-lucide="check-circle-2" class="w-5 h-5 text-green-500 shrink-0"></i>
+                                </div>
+                            </template>
+                            <template x-if="getPondLogs(selectedPond?.name).length === 0">
+                                <div class="text-center py-6 text-slate-400 font-medium">Chưa có hoạt động nào được ghi
+                                    nhận.</div>
+                            </template>
+                        </div>
+                        <button @click="showAILogsModal = true"
+                            class="w-full mt-4 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-200 transition-colors active:scale-95 flex justify-center items-center gap-2">
+                            Xem lịch sử đầy đủ <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <!-- 5. DỰ BÁO THU HOẠCH -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="trending-up" class="w-5 h-5 text-blue-600"></i> Dự báo thu hoạch
+                            </h3>
+                            <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">Vụ
+                                1/2026</span>
+                        </div>
+                        <div class="flex-1 flex flex-col space-y-5">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm font-bold text-slate-500 uppercase">Ngày thả tôm</span>
+                                    <span class="text-base font-bold text-slate-800"
+                                        x-text="formatDate(selectedPond?.stockingDate)"></span>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between text-sm font-bold text-slate-700 mb-1">
+                                    <span>Tiến độ sinh trưởng</span>
+                                    <span class="text-green-600">75%</span>
+                                </div>
+                                <div
+                                    class="w-full bg-slate-100 h-4 rounded-full overflow-hidden border border-slate-200">
+                                    <div class="bg-green-500 h-full rounded-full" style="width: 75%;"></div>
+                                </div>
+                            </div>
+                            <div
+                                class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between mt-auto">
+                                <div>
+                                    <p class="text-xs text-slate-500 font-bold uppercase">Ước tính trọng lượng</p>
+                                    <p class="text-2xl font-black text-slate-800 mt-0.5">12.0 <span
+                                            class="text-sm font-normal text-slate-500">kg/m²</span></p>
+                                </div>
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center">
+                                    <i data-lucide="award" class="w-6 h-6"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+
+
+
+
+
+
+
+
+        </main>
+
+        <!-- BOTTOM NAVIGATION (MOBILE) -->
+        <nav
+            class="md:hidden fixed bottom-0 w-full bg-white border-t border-slate-100 flex justify-around items-center h-20 pb-4 pt-2 z-50 px-2 shadow-[0_-4px_24px_rgba(0,0,0,0.05)]">
+            <template x-for="item in mobileNavItems" :key="item.id">
+                <button @click="currentView = item.id; selectedPondId = null;"
+                    class="flex flex-col items-center justify-center w-full h-full rounded-xl transition-all"
+                    :class="currentView === item.id && !selectedPondId ? 'text-green-600' : 'text-slate-400 hover:text-slate-600'">
+                    <div class="p-1.5 rounded-full mb-1 transition-all"
+                        :class="currentView === item.id && !selectedPondId ? 'bg-green-100' : 'bg-transparent'">
+                        <div x-html="getIconSVG(item.icon, currentView === item.id && !selectedPondId)"></div>
+                    </div>
+                    <span class="text-[11px] font-bold tracking-wide" x-text="item.label"></span>
+                </button>
+            </template>
+        </nav>
+
+
+        <!-- TOAST NOTIFICATION -->
+        <div class="fixed top-20 right-4 md:right-8 z-[150] flex flex-col gap-2 pointer-events-none">
+            <template x-for="toast in toasts" :key="toast.id">
+                <div x-show="toast.visible" x-transition:enter="transition ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-x-10"
+                    x-transition:enter-end="opacity-100 translate-x-0"
+                    x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0"
+                    class="bg-white/80 backdrop-blur-md text-slate-800 px-5 py-4 rounded-2xl shadow-xl flex items-center gap-3 font-semibold pointer-events-auto border border-slate-200 min-w-[280px]">
+
+                    <!-- Icon linh hoạt theo type -->
+                    <i data-lucide="check-circle-2" class="w-6 h-6 text-green-500"
+                        x-show="toast.type === 'success'"></i>
+                    <i data-lucide="info" class="w-6 h-6 text-blue-500" x-show="toast.type === 'info'"></i>
+
+                    <span x-text="toast.message" class="text-sm"></span>
+                </div>
+            </template>
+        </div>
+
+
+
+
+        <!-- MODAL CHỈNH SỬA THÔNG TIN AO -->
+        <div x-show="showEditPondModal"
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            style="display: none;">
+            <div @click.away="showEditPondModal = false"
+                class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 class="font-bold text-xl text-slate-800">Thông tin Ao nuôi</h3>
+                    <button @click="showEditPondModal = false"
+                        class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-5">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Tên ao mới</label>
+                        <input type="text" x-model="editPondName"
+                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 font-bold text-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Ngày thả tôm (Dự báo)</label>
+                        <input type="date" x-model="editStockingDate"
+                            class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 font-bold text-lg">
+                    </div>
+                </div>
+                <div class="p-6 flex gap-4 bg-slate-50">
+                    <button @click="savePondSettings()"
+                        class="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-lg active:scale-95">
+                        Lưu thông tin
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL TẤT CẢ NHẬT KÝ -->
+        <div x-show="showAllLogsModal"
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+            style="display: none;">
+            <div @click.away="showAllLogsModal = false"
+                class="bg-white rounded-3xl w-full max-w-lg h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-xl text-slate-800 flex items-center gap-2">
+                        <i data-lucide="book-open" class="text-green-600 w-5 h-5"></i> Toàn bộ nhật ký
+                    </h3>
+                    <button @click="showAllLogsModal = false"
+                        class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 overflow-y-auto space-y-4 flex-1">
+                    <div class="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <p class="text-xs text-slate-400 font-bold mb-1">Hôm nay - 08:30</p>
+                        <p class="font-bold text-slate-800">Thả 5kg thức ăn số 2</p>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <p class="text-xs text-slate-400 font-bold mb-1">Hôm qua - 16:00</p>
+                        <p class="font-bold text-slate-800">Xử lý môi trường, đo độ pH đạt 7.8</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL TRÍCH XUẤT QR TRUY XUẤT NGUỒN GỐC -->
+        <div x-show="showQRModal"
+            class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+            style="display: none;">
+            <div @click.away="showQRModal = false"
+                class="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+                <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-600 text-white">
+                    <h3 class="font-bold text-lg flex items-center gap-2">
+                        <i data-lucide="qr-code" class="w-5 h-5 text-blue-200"></i> Truy xuất nguồn gốc VAST
+                    </h3>
+                    <button @click="showQRModal = false"
+                        class="text-white hover:bg-blue-700 p-2 rounded-full transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <div class="p-6 overflow-y-auto no-scrollbar">
+                    <div class="flex justify-center mb-6">
+                        <div class="p-3 bg-white border-4 border-slate-100 rounded-2xl shadow-sm">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=VAST-TRACE-12345"
+                                alt="QR Code" class="w-32 h-32 rounded-lg">
+                        </div>
+                    </div>
+
+                    <div class="text-center mb-6">
+                        <span
+                            class="inline-flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 font-bold text-xs rounded-full uppercase tracking-wider">
+                            <i data-lucide="shield-check" class="w-4 h-4"></i> Blockchain Verified
+                        </span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <!-- 1. Thông tin vùng nuôi (Giữ nguyên) -->
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <h4 class="text-sm font-bold text-blue-600 mb-2 flex items-center gap-2"><i
+                                    data-lucide="map-pin" class="w-4 h-4"></i> Thông tin vùng nuôi</h4>
+                            <p class="text-sm text-slate-700 mt-1"><b>Mã số ao nuôi:</b> <span
+                                    x-text="selectedPond?.name"></span></p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Hộ nông dân:</b> Hợp tác xã Tôm sạch VAST</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Tọa độ GPS:</b> 9°10'33.2"N 105°43'21.1"E</p>
+                        </div>
+
+                        <!-- 2. Thông tin đầu vào (Đã thêm Tên giống) -->
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <h4 class="text-sm font-bold text-amber-600 mb-2 flex items-center gap-2"><i
+                                    data-lucide="package-search" class="w-4 h-4"></i> Thông tin đầu vào</h4>
+                            <p class="text-sm text-slate-700 mt-1"><b>Tên giống:</b> <span
+                                    x-text="selectedPond?.seed || 'Tôm thẻ chân trắng'"></span></p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Nguồn giống:</b> Công ty CP Giống Thủy Sản (Lô
+                                G-882)</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Thức ăn & Xử lý:</b> Cám tiêu chuẩn số 2, Vi sinh
+                                VAST-Bio</p>
+                        </div>
+
+                        <!-- 3. Quá trình chăm sóc (Đã thêm Ngày tuổi & Dịch bệnh) -->
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <h4 class="text-sm font-bold text-green-600 mb-2 flex items-center gap-2"><i
+                                    data-lucide="clipboard-check" class="w-4 h-4"></i> Quá trình chăm sóc</h4>
+                            <p class="text-sm text-slate-700 mt-1"><b>Ngày thả:</b> <span
+                                    x-text="formatDate(selectedPond?.stockingDate)"></span></p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Số ngày tuổi:</b> <span
+                                    class="font-bold text-blue-600"
+                                    x-text="calculateDays(selectedPond?.stockingDate) + ' ngày'"></span></p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Ngừng thuốc:</b> 15 ngày trước thu hoạch</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Lịch sử dịch bệnh:</b> <span
+                                    class="text-green-600 font-bold">100% Sạch bệnh (Chưa từng phát hiện)</span></p>
+                        </div>
+
+                        <!-- 4. Dữ liệu Môi trường (KHỐI MỚI THÊM) -->
+                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <h4 class="text-sm font-bold text-teal-600 mb-2 flex items-center gap-2"><i
+                                    data-lucide="activity" class="w-4 h-4"></i> Chỉ số môi trường (30 ngày qua)</h4>
+                            <p class="text-sm text-slate-700 mt-1"><b>Nhiệt độ TB:</b> <span
+                                    class="font-semibold">28.5°C</span> (Ổn định)</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>pH TB:</b> <span class="font-semibold">7.8 -
+                                    8.2</span> (Đạt chuẩn)</p>
+                            <p class="text-sm text-slate-700 mt-1"><b>Oxy hòa tan (DO):</b> <span
+                                    class="font-semibold">> 5.5 mg/L</span> (Tốt)</p>
+                            <p class="text-[11px] text-slate-400 italic mt-2 leading-tight">* Dữ liệu được đo đạc và xác
+                                thực tự động bởi hệ thống IoT VAST 24/7, cam kết không thể làm giả.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+    </div>
+
+    <!-- MODAL XÁC NHẬN XÓA AO -->
+    <div x-show="showDeleteConfirmModal"
+        class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showDeleteConfirmModal = false" x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-6 text-center">
+                <div
+                    class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+                </div>
+                <h3 class="font-black text-xl text-slate-800 mb-2">CẢNH BÁO XÓA AO</h3>
+                <p class="text-slate-600 text-sm font-medium">Bạn có chắc chắn muốn xóa ao này khỏi hệ thống
+                    không? Toàn bộ dữ liệu sẽ bị mất vĩnh viễn.</p>
+            </div>
+            <div class="p-4 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showDeleteConfirmModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95">
+                    Hủy bỏ
+                </button>
+                <button @click="confirmDeletePond()"
+                    class="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-200 active:scale-95">
+                    Xác nhận xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CHỈNH SỬA HỒ SƠ -->
+    <div x-show="showEditProfileModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showEditProfileModal = false" x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="font-bold text-xl text-slate-800">Chỉnh sửa hồ sơ</h3>
+                <button @click="showEditProfileModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-5">
+                <!-- KHỐI CHỌN AVATAR -->
+                <div class="flex flex-col items-center mb-2">
+                    <div class="relative w-24 h-24 mb-3">
+                        <!-- Ảnh Preview -->
+                        <img :src="editAvatar || user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(editName || user.name)}&background=16a34a&color=fff`"
+                            alt="Avatar Preview"
+                            class="w-full h-full rounded-full border-4 border-slate-100 object-cover shadow-sm">
+
+                        <!-- Nút tải ảnh -->
+                        <label for="avatarUpload"
+                            class="absolute bottom-0 right-0 bg-white text-blue-600 p-2 rounded-full shadow-md border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                            <i data-lucide="camera" class="w-4 h-4"></i>
+                        </label>
+                        <input type="file" id="avatarUpload" accept="image/*" class="hidden"
+                            @change="handleAvatarUpload">
+                    </div>
+                    <span class="text-xs text-slate-500 font-medium">Nhấn vào icon camera để đổi ảnh</span>
+                </div>
+
+                <!-- Ô NHẬP TÊN HIỂN THỊ (Đã bỏ Vai trò) -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-2">Tên hiển thị</label>
+                    <input type="text" x-model="editName"
+                        class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg"
+                        placeholder="Nhập tên hiển thị">
+                </div>
+            </div>
+            <div class="p-6 flex gap-4 bg-slate-50">
+                <button @click="showEditProfileModal = false"
+                    class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95">
+                    Hủy bỏ
+                </button>
+                <button @click="saveProfile()"
+                    class="flex-1 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-green-200 active:scale-95">
+                    Lưu thay đổi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL XÁC NHẬN ĐĂNG XUẤT -->
+    <div x-show="showLogoutConfirmModal"
+        class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showLogoutConfirmModal = false" x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-6 text-center">
+                <div
+                    class="w-16 h-16 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="log-out" class="w-8 h-8"></i>
+                </div>
+                <h3 class="font-black text-xl text-slate-800 mb-2">ĐĂNG XUẤT</h3>
+                <p class="text-slate-600 text-sm font-medium">Bạn có chắc chắn muốn đăng xuất khỏi hệ thống VAST
+                    không?</p>
+            </div>
+            <div class="p-4 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showLogoutConfirmModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95">
+                    Hủy bỏ
+                </button>
+                <button @click="confirmLogout()"
+                    class="flex-1 py-3 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors shadow-lg active:scale-95">
+                    Đăng xuất
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
+    <!-- MODAL LỊCH SỬ LỆNH AI -->
+    <div x-show="showAILogsModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showAILogsModal = false"
+            class="bg-white rounded-3xl w-full max-w-lg h-[80vh] flex flex-col overflow-hidden shadow-2xl">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-50">
+                <h3 class="font-bold text-lg text-blue-800 flex items-center gap-2"><i data-lucide="history"
+                        class="w-5 h-5 text-blue-600"></i> Lịch sử Lệnh AI</h3>
+                <button @click="showAILogsModal = false"
+                    class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-3 flex-1">
+                <template x-for="log in aiLogs" :key="log.id">
+                    <div class="p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <div class="flex justify-between items-center mb-1 text-xs text-slate-400 font-bold uppercase">
+                            <span x-text="log.date"></span>
+                            <span x-text="log.time" class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"></span>
+                        </div>
+                        <p class="font-bold text-slate-800 text-base" x-text="log.content"></p>
+                    </div>
+                </template>
+                <template x-if="aiLogs.length === 0">
+                    <div class="text-center py-10 text-slate-400 font-medium">Chưa có lịch sử lệnh AI nào.</div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DANH SÁCH TẤT CẢ GIAO DỊCH -->
+    <div x-show="showAllTransactionsModal"
+        class="fixed inset-0 z-[105] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showAllTransactionsModal = false"
+            class="bg-white rounded-3xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl max-h-[90vh]">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                    <i data-lucide="list" class="w-5 h-5 text-blue-600"></i> Tất cả giao dịch
+                </h3>
+                <button @click="showAllTransactionsModal = false"
+                    class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 flex-1 overflow-y-auto no-scrollbar space-y-3 bg-white">
+                <template x-for="txn in transactions.slice().reverse()" :key="txn.id">
+                    <div
+                        class="p-4 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold"
+                                :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
+                                <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
+                                    class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-slate-800 text-base" x-text="txn.category"></p>
+                                <p class="text-xs text-slate-500 font-medium mt-0.5"
+                                    x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
+                            </div>
+                        </div>
+                        <p class="font-black text-right text-lg tracking-tight"
+                            :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
+                            x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL THỐNG KÊ SỔ SÁCH & XUẤT EXCEL -->
+    <div x-show="showFinanceModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showFinanceModal = false"
+            class="bg-white rounded-3xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl max-h-[90vh]">
+            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2"><i data-lucide="pie-chart"
+                        class="w-5 h-5 text-blue-600"></i> Thống kê Sổ Sách</h3>
+                <button @click="showFinanceModal = false"
+                    class="bg-white text-slate-400 hover:text-red-500 p-2 rounded-full shadow-sm"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 flex-1 bg-white overflow-y-auto no-scrollbar">
+                <div class="flex bg-slate-100 p-1 rounded-xl mb-6">
+                    <button @click="financeTimeframe = 'Tuần'"
+                        :class="financeTimeframe === 'Tuần' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium hover:text-slate-800'"
+                        class="flex-1 py-1.5 text-sm rounded-lg transition-all text-center">Tuần</button>
+                    <button @click="financeTimeframe = 'Tháng'"
+                        :class="financeTimeframe === 'Tháng' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium hover:text-slate-800'"
+                        class="flex-1 py-1.5 text-sm rounded-lg transition-all text-center">Tháng</button>
+                    <button @click="financeTimeframe = 'Năm'"
+                        :class="financeTimeframe === 'Năm' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium hover:text-slate-800'"
+                        class="flex-1 py-1.5 text-sm rounded-lg transition-all text-center">Năm</button>
+                </div>
+
+                <!-- Tự động cập nhật tiêu đề theo thời gian hiện tại -->
+                <p class="text-center text-sm font-bold text-slate-500 mb-2" x-text="
+                    financeTimeframe === 'Tuần' ? 'Tuần này' : 
+                    (financeTimeframe === 'Tháng' ? 'Tháng ' + (new Date().getMonth() + 1) + '/' + new Date().getFullYear() : 
+                    'Năm ' + new Date().getFullYear())">
+                </p>
+
+                <div class="w-full h-56 relative mb-4">
+                    <canvas id="financePieChart"></canvas>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="bg-green-50 p-3 rounded-xl border border-green-200 text-center">
+                        <p class="text-[11px] font-bold text-green-700 uppercase tracking-wide mb-0.5">Tổng thu</p>
+                        <p class="text-lg font-black text-green-600" x-text="formatNumber(totalIncome) + ' đ'"></p>
+                    </div>
+                    <div class="bg-red-50 p-3 rounded-xl border border-red-200 text-center">
+                        <p class="text-[11px] font-bold text-red-700 uppercase tracking-wide mb-0.5">Tổng chi</p>
+                        <p class="text-lg font-black text-red-600" x-text="formatNumber(totalExpense) + ' đ'"></p>
+                    </div>
+                    <div
+                        class="bg-amber-50 p-3 rounded-xl border border-amber-200 text-center col-span-2 flex justify-between items-center px-4">
+                        <p class="text-xs font-bold text-amber-800 uppercase flex items-center gap-1.5"><i
+                                data-lucide="zap" class="w-4 h-4"></i> Tiền điện (Tự động)</p>
+                        <p class="text-lg font-black text-amber-600"
+                            x-text="'-' + formatNumber(totalElectricityCost) + ' đ'"></p>
+                    </div>
+                    <div
+                        class="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center col-span-2 shadow-lg flex justify-between items-center px-5">
+                        <p class="text-sm font-bold text-slate-300 uppercase tracking-wider">Tổng số dư</p>
+                        <p class="text-2xl font-black"
+                            :class="calculateBalance() >= 0 ? 'text-green-400' : 'text-red-400'"
+                            x-text="formatNumber(calculateBalance()) + ' đ'"></p>
+                    </div>
+                </div>
+
+                <button @click="downloadExcel()"
+                    class="w-full btn bg-green-600 hover:bg-green-700 text-white py-3.5 shadow-sm flex gap-2 active:scale-95 transition-all">
+                    <i data-lucide="download" class="w-5 h-5"></i> Tải Báo Cáo (<span x-text="financeTimeframe"></span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL THÊM AO MỚI -->
+
+    <div x-show="showAddPondModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="if (!showErrorModal) showAddPondModal = false"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                <h3 class="font-bold text-xl text-slate-800">Thêm Ao Nuôi Mới</h3>
+                <button @click="showAddPondModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Tên ao <span
+                            class="text-red-500">*</span></label>
+                    <input type="text" x-model="newPondName" placeholder="Ví dụ: Ao số 3"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Diện tích ao nuôi (m²) <span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="newPondArea" placeholder="Ví dụ: 1000"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Ngày thả tôm</label>
+                    <input type="date" x-model="newPondDate"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Số lượng tôm giống (con)<span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="newPondShrimpCount" placeholder="Ví dụ: 500000"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+                <!-- THÊM TÊN CON GIỐNG -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Tên con giống <span
+                            class="text-red-500">*</span></label>
+                    <input type="text" x-model="newPondSeed" placeholder="Ví dụ: Tôm thẻ chân trắng"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+            </div>
+            <div class="p-6 flex gap-4 bg-slate-50 border-t border-slate-100">
+                <button @click="showAddPondModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95">
+                    Hủy bỏ
+                </button>
+                <button @click="addNewPond()"
+                    class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all">
+                    Tạo Ao Mới
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL THÔNG BÁO LỖI (CHUNG) -->
+    <div x-show="showErrorModal"
+        class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;" @click.stop="showErrorModal = false"> <!-- Chặn click lọt xuống dưới lớp nền -->
+
+        <div @click.stop class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-6 text-center">
+                <div
+                    class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="alert-circle" class="w-8 h-8"></i>
+                </div>
+                <h3 class="font-black text-xl text-slate-800 mb-2">Thông báo</h3>
+                <!-- Hiển thị nội dung lỗi động -->
+                <p class="text-slate-600 text-base font-medium" x-text="errorMessage"></p>
+            </div>
+            <div class="p-4 bg-slate-50 border-t border-slate-100">
+                <button @click.stop="showErrorModal = false"
+                    class="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-md active:scale-95">
+                    Đã hiểu
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL CÀI ĐẶT VÂN TAY ================= -->
+    <div x-show="showFingerprintModal"
+        class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+
+        <div @click.away="if(fingerprintStep !== 'scanning') showFingerprintModal = false" x-show="showFingerprintModal"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl text-center border border-slate-100">
+
+            <div class="p-8">
+                <!-- Khu vực Icon Trạng thái có hiệu ứng -->
+                <div class="w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-6 relative"
+                    :class="fingerprintStep === 'scanning' ? 'bg-blue-50' : (fingerprintStep === 'success' ? 'bg-green-50' : 'bg-red-50')">
+
+                    <!-- Vòng tròn hiệu ứng toả ra (chỉ chạy khi đang quét) -->
+                    <div x-show="fingerprintStep === 'scanning'"
+                        class="absolute inset-0 border-4 border-blue-400 rounded-full animate-ping opacity-30"></div>
+
+                    <!-- Icon Lucide đổi màu theo trạng thái -->
+                    <i data-lucide="fingerprint" class="w-12 h-12 transition-colors duration-300" :class="{
+                       'text-blue-500 animate-pulse': fingerprintStep === 'scanning',
+                       'text-green-500': fingerprintStep === 'success',
+                       'text-red-500': fingerprintStep === 'error'
+                   }"></i>
+                </div>
+
+                <!-- Tiêu đề & Nội dung -->
+                <h3 class="font-black text-2xl text-slate-800 mb-2 tracking-tight"
+                    x-text="fingerprintStep === 'scanning' ? 'Quét vân tay' : (fingerprintStep === 'success' ? 'Thành công!' : 'Thất bại')">
+                </h3>
+
+                <p class="text-slate-500 font-medium text-sm"
+                    x-text="fingerprintStep === 'scanning' ? 'Vui lòng chạm vào cảm biến vân tay trên thiết bị của bạn...' : (fingerprintStep === 'success' ? 'Đã liên kết dữ liệu sinh trắc học.' : 'Không nhận diện được vân tay, vui lòng thử lại.')">
+                </p>
+            </div>
+
+            <!-- Nút Hủy (Chỉ hiện khi đang chờ quét) -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100" x-show="fingerprintStep === 'scanning'">
+                <button @click="cancelFingerprint()"
+                    class="w-full py-3.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95 shadow-sm">
+                    Hủy bỏ
+                </button>
+            </div>
+
+            <!-- Nút Đóng (Chỉ hiện khi đã quét Xong/Lỗi) -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100" x-show="fingerprintStep !== 'scanning'"
+                style="display: none;">
+                <button @click="showFingerprintModal = false"
+                    class="w-full py-3.5 text-white font-bold rounded-xl transition-colors active:scale-95 shadow-md"
+                    :class="fingerprintStep === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'">
+                    Hoàn tất
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL NẠP THỨC ĂN (THEO SKETCH 3 BƯỚC) ================= -->
+    <div x-show="showFeedModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="if (!showErrorModal) showFeedModal = false"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100">
+
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+                <h3 class="font-black text-xl text-slate-800 flex items-center gap-2">
+                    <i data-lucide="package-plus" class="w-6 h-6 text-amber-500"></i> Nạp Thức Ăn
+                </h3>
+                <button @click="showFeedModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <!-- BƯỚC 2 (Trong sketch): Chọn Ao -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Chọn ao nuôi <span
+                            class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <select x-model="feedPondId"
+                            class="w-full p-4 pr-10 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-amber-500 font-bold text-slate-800 text-base appearance-none cursor-pointer">
+                            <!-- Danh sách ao động -->
+                            <template x-for="pond in ponds" :key="pond.id">
+                                <option :value="pond.id" x-text="pond.name"></option>
+                            </template>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <!-- BƯỚC 3 (Trong sketch): Số kg nạp vào -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Số kg thức ăn nạp vào <span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="feedAmount" placeholder="Ví dụ: 50"
+                        class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-amber-500 font-bold text-lg text-slate-800">
+                </div>
+
+                <!-- BƯỚC 3 (Trong sketch): Ngưỡng cảnh báo -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Ngưỡng cảnh báo khi hết thức ăn <span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="feedAlertThreshold" placeholder="Ví dụ: 20"
+                        class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-amber-500 font-bold text-lg text-slate-800">
+                    <p class="text-[13px] text-slate-500 font-medium mt-2 flex items-start gap-1">
+                        <i data-lucide="info" class="w-4 h-4 text-blue-500 shrink-0"></i>
+                        AI sẽ tự động báo khi lượng thức ăn còn lại bằng ngưỡng này.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Nút Xác nhận -->
+            <div class="p-6 flex gap-4 bg-slate-50 border-t border-slate-100">
+                <button @click="showFeedModal = false"
+                    class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95 shadow-sm">
+                    Hủy bỏ
+                </button>
+                <button @click="confirmFeed()"
+                    class="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg shadow-amber-200 active:scale-95 transition-all">
+                    Xác nhận nạp
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CẬP NHẬT GIÁ ĐIỆN -->
+    <div x-show="showElectricityPriceModal"
+        class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showElectricityPriceModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-amber-50">
+                <h3 class="font-bold text-lg text-amber-800 flex items-center gap-2"><i data-lucide="zap"
+                        class="w-5 h-5 text-amber-600"></i> Cập nhật Giá điện</h3>
+                <button @click="showElectricityPriceModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6">
+                <label class="block text-sm font-bold text-slate-600 mb-2">Nhập giá điện mới (VNĐ/kWh)</label>
+                <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                    x-model="tempElectricityPrice" placeholder="Ví dụ: 2500"
+                    class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-black text-xl text-center text-slate-800 transition-colors">
+            </div>
+            <div class="p-5 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showElectricityPriceModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all active:scale-95">Hủy</button>
+                <button @click="saveElectricityPrice()"
+                    class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all">Lưu
+                    thay đổi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL SỬA GIAO DỊCH -->
+    <div x-show="showEditTransactionModal"
+        class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showEditTransactionModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center"
+                :class="editTxnType === 'chi' ? 'bg-red-50' : 'bg-green-50'">
+                <h3 class="font-bold text-lg flex items-center gap-2"
+                    :class="editTxnType === 'chi' ? 'text-red-800' : 'text-green-800'">
+                    <i data-lucide="edit-3" class="w-5 h-5"></i> Sửa giao dịch
+                </h3>
+                <button @click="showEditTransactionModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Số tiền (VNĐ)</label>
+                    <input type="text" x-model="editTxnAmount" @input="formatEditCurrency()"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-black text-xl text-right text-slate-800">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Danh mục</label>
+                    <select x-model="editTxnCategory"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-800 appearance-none">
+                        <template x-if="editTxnType === 'chi'">
+                            <optgroup label="Khoản chi">
+                                <option>Thức ăn</option>
+                                <option>Thuốc men</option>
+                                <option>Con giống</option>
+                                <option>Thiết bị</option>
+                                <option>Khác</option>
+                            </optgroup>
+                        </template>
+                        <template x-if="editTxnType === 'thu'">
+                            <optgroup label="Khoản thu">
+                                <option>Bán tôm</option>
+                                <option>Thu khác</option>
+                            </optgroup>
+                        </template>
+                    </select>
+                </div>
+            </div>
+            <div class="p-5 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showEditTransactionModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all active:scale-95">Hủy</button>
+                <button @click="saveEditedTransaction()"
+                    class="flex-1 py-3 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all"
+                    :class="editTxnType === 'chi' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'">Cập
+                    nhật</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        function farmApp() {
+            return {
+                // ===== GAN MODULE KET NOI ESP32 THAT (js/iot.js) =====
+                // Dat o dau de cac thuoc tinh ben duoi van uu tien neu trung ten.
+                ...iotModule(),
+
+                currentView: 'dashboard',
+                currentTime: '',
+                isRecording: false,
+                voiceResult: '',
+                aiTextInput: '',
+                // LUU Y: KHONG dat doi tuong Chart vao day nua.
+                // Alpine boc Proxy len moi thuoc tinh, lam Chart.js goi update()
+                // khong ve lai duoc. Bieu do gio giu trong js/iot.js,
+                // truy cap qua iotGetChart('overview' | 'detail' | 'finance').
+                showFeedModal: false,
+                feedPondId: '',
+                feedAmount: '',
+                feedAlertThreshold: '', // Mặc định hiển thị là 30 như sketch
+
+                selectedPondId: null,
+                chartTimeframe: '1d',
+
+                // Biến trạng thái Modal
+                showEditProfileModal: false,
+                editName: '',
+
+                editAvatar: '',
+                showEditPondModal: false,
+                showDeleteConfirmModal: false,
+                showLogoutConfirmModal: false,
+                editPondName: '',
+                editStockingDate: '',
+                showAllLogsModal: false,
+                showQRModal: false,
+                showAILogsModal: false,
+                showFinanceModal: false,
+                showAllTransactionsModal: false,
+                showAddPondModal: false,
+                newPondName: '',
+                newPondArea: '',
+                newPondSeed: '',
+                newPondDate: new Date().toISOString().split('T')[0],
+                newPondShrimpCount: '',
+
+                // Biến Sổ Sách
+                electricityPrice: 2500, // Giá điện mặc định
+                totalKwhConsumed: 450.5, // Số điện tiêu thụ (Sẽ nhận từ ESP32/INA219)
+                financeTimeframe: 'Tháng',
+                showElectricityPriceModal: false,
+                tempElectricityPrice: '',
+                showEditTransactionModal: false,
+                editingTxnId: null,
+                editTxnCategory: '',
+                editTxnAmount: '',
+                editTxnType: 'chi',
+                // ...
+                // Biến trạng thái Modal
+                showErrorModal: false, // Biến bật/tắt pop-up lỗi
+                errorMessage: '',      // Biến chứa nội dung lỗi
+
+                isFingerprintEnabled: false,
+
+                // Biến điều khiển Modal Pop-up
+                showFingerprintModal: false,
+                fingerprintStep: 'scanning', // Các trạng thái: 'scanning', 'success', 'error'
+                fingerprintTimer: null,
+
+                // Biến Sổ Sách
+                financeTimeframe: 'Tháng',
+                financeType: 'chi',
+                financeAmount: '',
+                financeCategory: 'Thức ăn',
+                financeDate: new Date().toISOString().split('T')[0],
+                financeNote: '',
+                transactions: [
+                    { id: 1, type: 'chi', amountFormatted: '5,000,000', amount: 5000000, category: 'Thức ăn', date: '2026-08-01', note: 'Mua cám' },
+                    { id: 2, type: 'chi', amountFormatted: '2,000,000', amount: 2000000, category: 'Tiền điện', date: '2026-08-05', note: 'Tháng 7' }
+                ],
+
+                // Biến Nhật ký AI
+                aiLogs: [
+                    { id: 101, time: '08:30', date: '09/08/2026', content: 'Thả 5kg thức ăn số 2 vào Ao số 1', targetPond: 'Ao số 1' },
+                    { id: 102, time: '16:00', date: '08/08/2026', content: 'Hệ thống tự động bật quạt sục khí xử lý pH thấp ở Ao số 1', targetPond: 'Ao số 1' }
+                ],
+
+                user: { name: 'Chú Ba', role: 'Trại trưởng', avatar: '' },
+                toasts: [],
+                alerts: [],
+
+                ponds: [
+                    { id: 'pond_01', name: 'Ao số 1', status: 'safe', temperature: 28.5, ph: 7.8, do: 5.8, fan: true, pump: false, stockingDate: '2026-05-15' },
+                    { id: 'pond_02', name: 'Ao số 2', status: 'safe', temperature: 28.2, ph: 7.6, do: 6.1, fan: true, pump: true, stockingDate: '2026-06-01' }
+                ],
+
+                navItems: [
+                    { id: 'dashboard', label: 'Tổng quan Ao', icon: 'layout-dashboard' },
+                    { id: 'ai', label: 'Trợ lý AI', icon: 'bot' },
+                    { id: 'logs', label: 'Sổ sách', icon: 'wallet' },
+                    { id: 'market', label: 'Thông tin thị trường', icon: 'store' },
+                    { id: 'settings', label: 'Cài đặt', icon: 'settings' }
+                ],
+                mobileNavItems: [
+                    { id: 'dashboard', label: 'TỔNG QUAN', icon: 'layout-dashboard' },
+                    { id: 'ai', label: 'TRỢ LÝ AI', icon: 'bot' },
+                    { id: 'logs', label: 'SỔ SÁCH', icon: 'wallet' },
+                    { id: 'market', label: 'THỊ TRƯỜNG', icon: 'store' },
+                    { id: 'settings', label: 'CÀI ĐẶT', icon: 'settings' }
+                ],
+
+                get selectedPond() { return this.ponds.find(p => p.id === this.selectedPondId); },
+
+
+                initApp() {
+                    const savedUser = localStorage.getItem('currentUser');
+                    if (savedUser) {
+                        try {
+                            const parsed = JSON.parse(savedUser);
+                            this.user.name = parsed.name || this.user.name;
+                            this.user.role = parsed.role || this.user.role;
+                            this.user.avatar = parsed.avatar || ''; // Thêm dòng này để load ảnh
+                        } catch (e) { this.user.name = savedUser; }
+                    }
+                    this.updateClock(); setInterval(() => this.updateClock(), 1000);
+                    this.$nextTick(() => { lucide.createIcons(); this.initChart(); });
+
+                    // ===== BAT DAU LAY DU LIEU THAT TU ESP32 =====
+                    this.initIot();
+                    // Ve lai icon sau moi lan du lieu IoT lam thay doi giao dien
+                    setInterval(() => lucide.createIcons(), 2000);
+
+                    this.$watch('currentView', (val) => {
+                        this.$nextTick(() => {
+                            lucide.createIcons();
+                            if (val === 'dashboard' && !this.selectedPondId) this.initChart();
+                        });
+                    });
+                    this.$watch('selectedPondId', (id) => { if (id) this.$nextTick(() => { lucide.createIcons(); this.initDetailChart(); }); });
+                    this.$watch('financeType', (val) => { this.financeCategory = val === 'chi' ? 'Thức ăn' : 'Bán tôm'; });
+                },
+
+
+
+                // ---- XỬ LÝ SỔ SÁCH ----
+                formatCurrency() {
+                    let val = this.financeAmount.replace(/\D/g, '');
+                    this.financeAmount = val !== '' ? new Intl.NumberFormat('vi-VN').format(val) : '';
+                },
+                saveTransaction() {
+                    if (!this.financeAmount || this.financeAmount === '0') { alert('Vui lòng nhập số tiền hợp lệ!'); return; }
+                    let rawAmount = parseInt(this.financeAmount.replace(/\D/g, ''));
+                    this.transactions.push({
+                        id: Date.now(),
+                        type: this.financeType, amount: rawAmount, amountFormatted: this.financeAmount,
+                        category: this.financeCategory, date: this.financeDate, note: this.financeNote
+                    });
+                    this.showToast(`Đã lưu giao dịch ${this.financeType === 'chi' ? 'Chi' : 'Thu'}!`, 'success');
+                    this.financeAmount = ''; this.financeNote = '';
+                    this.$nextTick(() => lucide.createIcons());
+                },
+                openFinanceModal() {
+                    this.showFinanceModal = true;
+                    this.$nextTick(() => { this.initFinanceChart(); });
+                },
+                openFinanceModal() {
+                    this.showFinanceModal = true;
+                    this.$nextTick(() => { this.initFinanceChart(); });
+                },
+                get selectedPond() { return this.ponds.find(p => p.id === this.selectedPondId); },
+
+                // --- THÊM PHẦN NÀY ---
+                get totalIncome() {
+                    return this.transactions.filter(t => t.type === 'thu').reduce((sum, t) => sum + t.amount, 0);
+                },
+                get totalExpense() {
+                    return this.transactions.filter(t => t.type === 'chi').reduce((sum, t) => sum + t.amount, 0);
+                },
+                get totalElectricityCost() {
+                    return Math.round(this.totalKwhConsumed * this.electricityPrice);
+                },
+                calculateBalance() {
+                    return this.totalIncome - this.totalExpense - this.totalElectricityCost;
+                },
+                updateElectricityPrice() {
+                    this.tempElectricityPrice = this.electricityPrice;
+                    this.showElectricityPriceModal = true;
+                },
+                saveElectricityPrice() {
+                    if (this.tempElectricityPrice && this.tempElectricityPrice > 0) {
+                        this.electricityPrice = parseInt(this.tempElectricityPrice);
+                        this.showElectricityPriceModal = false;
+                        this.showToast('Cập nhật giá điện thành công!', 'success');
+                        this.$nextTick(() => { this.initFinanceChart(); });
+                    } else {
+                        this.showToast('Vui lòng nhập giá điện hợp lệ!', 'error');
+                    }
+                },
+
+                // === LOGIC SỬA GIAO DỊCH ===
+                openEditTransaction(txn) {
+                    this.editingTxnId = txn.id;
+                    this.editTxnCategory = txn.category;
+                    this.editTxnAmount = txn.amountFormatted;
+                    this.editTxnType = txn.type;
+                    this.showEditTransactionModal = true;
+                    this.$nextTick(() => lucide.createIcons());
+                },
+                formatEditCurrency() {
+                    let val = String(this.editTxnAmount).replace(/\D/g, '');
+                    this.editTxnAmount = val !== '' ? new Intl.NumberFormat('vi-VN').format(val) : '';
+                },
+                saveEditedTransaction() {
+                    let rawAmount = parseInt(String(this.editTxnAmount).replace(/\D/g, ''));
+                    if (!rawAmount || rawAmount <= 0) {
+                        this.errorMessage = 'Vui lòng nhập số tiền hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    // Tìm và đè dữ liệu mới lên
+                    let index = this.transactions.findIndex(t => t.id === this.editingTxnId);
+                    if (index !== -1) {
+                        this.transactions[index].category = this.editTxnCategory;
+                        this.transactions[index].amountFormatted = this.editTxnAmount;
+                        this.transactions[index].amount = rawAmount;
+                    }
+
+                    this.showEditTransactionModal = false;
+                    this.showToast('Đã cập nhật lại giao dịch!', 'success');
+
+                    // Vẽ lại biểu đồ vì số tiền vừa bị thay đổi
+                    this.$nextTick(() => { this.initFinanceChart(); lucide.createIcons(); });
+                },
+                formatNumber(num) {
+
+                    return new Intl.NumberFormat('vi-VN').format(num);
+                },
+                // --- KẾT THÚC PHẦN THÊM ---
+
+                // ---- HÀM TẢI FILE EXCEL MỚI THÊM VÀO ----
+                downloadExcel() {
+                    // Ký tự \uFEFF là BOM chuẩn để Excel đọc tiếng Việt không bị lỗi font
+                    let csvContent = '\uFEFFNgày,Loại,Danh mục,Số tiền (VNĐ),Ghi chú\n';
+
+                    this.transactions.forEach(t => {
+                        // Chú ý: phải có this. trước các hàm/biến khai báo trong Alpine
+                        let date = this.formatDate(t.date);
+                        let type = t.type === 'chi' ? 'Chi' : 'Thu';
+                        let amount = t.amount;
+                        let note = t.note || '';
+                        csvContent += `${date},${type},${t.category},${amount},${note}\n`;
+                    });
+
+                    csvContent += `\n,,,,\n`;
+                    csvContent += `TỔNG KẾT,,,,\n`;
+                    csvContent += `Tổng thu (A),,,${this.totalIncome} đ,\n`;
+                    csvContent += `Tổng chi phí thủ công (B),,,${this.totalExpense} đ,\n`;
+                    csvContent += `Tiền điện tự động (C),,,${this.totalElectricityCost} đ,${this.totalKwhConsumed} kWh x ${this.electricityPrice}đ\n`;
+                    csvContent += `TỔNG SỐ DƯ (A - B - C),,,${this.calculateBalance()} đ,\n`;
+
+                    let timeString = '';
+                    let currentD = new Date();
+                    if (this.financeTimeframe === 'Tuần') timeString = 'Tuan_Nay';
+                    if (this.financeTimeframe === 'Tháng') timeString = `Thang_${currentD.getMonth() + 1}_${currentD.getFullYear()}`;
+                    if (this.financeTimeframe === 'Năm') timeString = `Nam_${currentD.getFullYear()}`;
+
+                    let fileName = `Bao_Cao_Thu_Chi_VAST_${timeString}.csv`;
+
+                    // Tạo Blob để trình duyệt tải file về
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', fileName);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    this.showToast('Đã tải báo cáo Excel thành công!', 'success');
+                },
+                openProfileModal() {
+                    // Tự động lấy tên người dùng từ lúc Đăng ký
+                    this.editName = this.user.name;
+                    this.editAvatar = this.user.avatar || '';
+                    this.showEditProfileModal = true;
+                },
+
+                // Hàm đọc file ảnh thành định dạng Base64 để hiển thị & lưu
+                handleAvatarUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.editAvatar = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                },
+
+                saveProfile() {
+                    if (this.editName.trim() === '') {
+                        this.errorMessage = 'Vui lòng không để trống tên nhé!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    // Cập nhật dữ liệu mới lên giao diện
+                    this.user.name = this.editName;
+                    this.user.avatar = this.editAvatar;
+
+                    // Giữ lại các thông tin cũ (như Số điện thoại, Vai trò) và chỉ đè Tên/Ảnh mới lên
+                    let currentData = {};
+                    try {
+                        currentData = JSON.parse(localStorage.getItem('currentUser')) || {};
+                    } catch (e) { }
+
+                    currentData.name = this.user.name;
+                    currentData.avatar = this.user.avatar;
+
+                    // Lưu vào bộ nhớ máy để tải lại trang không bị mất
+                    localStorage.setItem('currentUser', JSON.stringify(currentData));
+
+                    this.showEditProfileModal = false;
+                    this.showToast('Đã cập nhật hồ sơ thành công!', 'success');
+                    this.$nextTick(() => lucide.createIcons());
+                },
+                // ---- XỬ LÝ AI & NHẬT KÝ ----
+                submitAILog(text) {
+                    if (!text || text.trim() === '') return;
+                    const now = new Date();
+                    let detectedPondName = "Hệ thống chung";
+                    if (text.toLowerCase().includes("ao 1") || text.toLowerCase().includes("ao số 1")) detectedPondName = "Ao số 1";
+                    else if (text.toLowerCase().includes("ao 2") || text.toLowerCase().includes("ao số 2")) detectedPondName = "Ao số 2";
+
+                    this.aiLogs.unshift({
+                        id: Date.now(),
+                        time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                        date: now.toLocaleDateString('vi-VN'),
+                        content: text, targetPond: detectedPondName
+                    });
+
+                    this.showToast('Ghi nhận vào Nhật ký thành công!');
+                    this.aiTextInput = ''; this.voiceResult = ''; this.currentView = 'dashboard';
+                },
+                getPondLogs(pondName) {
+                    return this.aiLogs.filter(log => log.targetPond === pondName || log.targetPond === "Hệ thống chung");
+                },
+
+                // ---- CÁC HÀM CŨ ĐÃ CÓ ----
+                openPondDetail(pondId) { this.selectedPondId = pondId; },
+                openEditPondModal() {
+                    if (this.selectedPond) {
+                        this.editPondName = this.selectedPond.name;
+                        this.editStockingDate = this.selectedPond.stockingDate || '';
+                        this.showEditPondModal = true;
+                    }
+                },
+                savePondSettings() {
+                    if (this.editPondName.trim() === '') { alert('Vui lòng không để trống tên ao!'); return; }
+                    if (this.selectedPond) {
+                        this.selectedPond.name = this.editPondName; this.selectedPond.stockingDate = this.editStockingDate;
+                        this.showEditPondModal = false; this.showToast('Đã cập nhật thông tin thành công!');
+                        this.$nextTick(() => lucide.createIcons());
+                    }
+                },
+
+                addNewPond() {
+                    // Thay thế alert() bằng Modal
+                    if (this.newPondName.trim() === '') {
+                        this.errorMessage = 'Vui lòng nhập tên ao!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+                    if (!this.newPondArea || this.newPondArea <= 0) {
+                        this.errorMessage = 'Vui lòng nhập diện tích ao nuôi hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    if (this.newPondSeed.trim() === '') {
+                        this.errorMessage = 'Vui lòng nhập tên con giống!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    if (!this.newPondShrimpCount || this.newPondShrimpCount <= 0) {
+                        this.errorMessage = 'Vui lòng nhập số lượng tôm giống!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    // (Phần logic thêm ao phía dưới giữ nguyên)
+                    const newId = 'pond_' + Date.now();
+                    this.ponds.push({
+                        id: newId,
+                        name: this.newPondName,
+                        seed: this.newPondSeed,
+                        status: 'safe',
+                        temperature: 28.0,
+                        ph: 7.5,
+                        do: 6.0,
+                        fan: false,
+                        pump: false,
+                        stockingDate: this.newPondDate,
+                        shrimpCount: this.newPondShrimpCount
+                    });
+
+                    this.showAddPondModal = false;
+                    this.newPondName = '';
+                    this.newPondSeed = '';
+                    this.newPondShrimpCount = '';
+
+                    this.showToast('Đã thêm ao nuôi mới thành công!', 'success');
+                    this.$nextTick(() => lucide.createIcons());
+                },
+
+                // Hàm mở Modal và chọn sẵn Ao đầu tiên
+                openFeedModal() {
+                    this.feedPondId = this.ponds.length > 0 ? this.ponds[0].id : '';
+                    this.feedAmount = '';
+                    this.feedAlertThreshold = '';
+                    this.showFeedModal = true;
+                    this.$nextTick(() => lucide.createIcons());
+                },
+
+                // Hàm Xác nhận lưu dữ liệu nạp thức ăn
+                confirmFeed() {
+                    if (!this.feedPondId) {
+                        this.errorMessage = 'Vui lòng chọn ao để nạp thức ăn!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+                    if (!this.feedAmount || this.feedAmount <= 0) {
+                        this.errorMessage = 'Vui lòng nhập số kg thức ăn hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+                    if (!this.feedAlertThreshold || this.feedAlertThreshold <= 0) {
+                        this.errorMessage = 'Vui lòng thiết lập ngưỡng cảnh báo hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    // Tìm tên ao để hiển thị thông báo
+                    const targetPond = this.ponds.find(p => p.id === this.feedPondId);
+                    const pondName = targetPond ? targetPond.name : 'Hệ thống';
+
+                    // Tự động Ghi nhật ký nuôi tôm
+                    this.aiLogs.unshift({
+                        id: Date.now(),
+                        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                        date: new Date().toLocaleDateString('vi-VN'),
+                        content: `Nạp ${this.feedAmount}kg thức ăn. Đặt ngưỡng AI theo dõi: ${this.feedAlertThreshold} con/kg.`,
+                        targetPond: pondName
+                    });
+
+                    // Đóng Modal và báo thành công
+                    this.showFeedModal = false;
+                    this.showToast(`Đã nạp thành công ${this.feedAmount}kg cám vào ${pondName}!`, 'success');
+                },
+
+                confirmDeletePond() {
+                    this.ponds = this.ponds.filter(p => p.id !== this.selectedPondId);
+                    this.selectedPondId = null; this.showDeleteConfirmModal = false; this.showToast('Đã xóa ao thành công!');
+                },
+                confirmLogout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; },
+                formatDate(dateStr) {
+                    if (!dateStr) return 'Chưa có thông tin';
+                    const parts = dateStr.split('-');
+                    return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+                },
+                setChartTimeframe(tf) {
+                    this.chartTimeframe = tf;
+                    this.$nextTick(() => this.initDetailChart());   // ve lai voi khoang thoi gian moi
+                },
+                getPondAlerts() { return this.alerts.filter(a => a.pondId === this.selectedPondId || !a.pondId); },
+                updateClock() { const now = new Date(); this.currentTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); },
+                getPageTitle() {
+                    if (this.selectedPondId && this.selectedPond) return 'Chi tiết ' + this.selectedPond.name;
+                    const view = this.navItems.find(i => i.id === this.currentView);
+                    return view ? view.label : 'Hệ thống Quản lý';
+                },
+                getIconSVG(name, isActive) {
+                    const color = isActive ? '#16a34a' : '#94a3b8';
+                    const icons = {
+                        'layout-dashboard': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>`,
+                        'bot': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`,
+                        'wallet': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>`,
+                        'settings': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+                        'store': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>`
+                    };
+                    return icons[name] || '';
+                },
+                toggleDevice(pondId, deviceType) {
+                    const pond = this.ponds.find(p => p.id === pondId);
+                    if (!pond) return;
+
+                    // ===== AO CO GAN ESP32 THAT =====
+                    // Gui lenh xuong thiet bi, KHONG tu doi nut tren giao dien.
+                    // Nut chi doi khi ESP32 gui trang thai that ve (xem js/iot.js).
+                    if (this.hasIot(pond)) {
+                        const which = deviceType === 'fan' ? 'aerator' : 'pump';
+                        this.iotSetDevice(pondId, which, !pond[deviceType]);
+                        return;
+                    }
+
+                    // ===== AO DEMO (chua gan thiet bi) - giu nguyen hanh vi cu =====
+                    pond[deviceType] = !pond[deviceType];
+                    this.showToast(`Đã ${pond[deviceType] ? 'BẬT' : 'TẮT'} ${deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm'} ở ${pond.name}`);
+                },
+                toggleAll(deviceType) {
+                    const allOn = this.ponds.every(p => p[deviceType]);
+
+                    this.ponds.forEach(p => {
+                        if (this.hasIot(p)) {
+                            // Ao that: gui lenh (chi co tac dung khi ao do dang MANUAL)
+                            const d = this.iot.byPond[p.id];
+                            if (d && d.mode === 'MANUAL') {
+                                this.iotSetDevice(p.id, deviceType === 'fan' ? 'aerator' : 'pump', !allOn);
+                            }
+                        } else {
+                            p[deviceType] = !allOn;   // ao demo
+                        }
+                    });
+
+                    const anyAuto = this.ponds.some(p => this.hasIot(p) && this.iot.byPond[p.id].mode === 'AUTO');
+                    if (anyAuto) {
+                        this.showToast('Mot so ao dang o che do AUTO - ESP32 tu dieu khien, khong nhan lenh tay.', 'info');
+                    } else {
+                        this.showToast(`Đã gửi lệnh ${!allOn ? 'BẬT' : 'TẮT'} toàn bộ ${deviceType === 'fan' ? 'Quạt nước' : 'Máy bơm'}`);
+                    }
+                },
+                isAllFansOn() { return this.ponds.length > 0 && this.ponds.every(p => p.fan); },
+
+                simulatePhDrop() {
+                    this.currentView = 'dashboard'; this.selectedPondId = null;
+                    // Lấy chính xác Ao Số 1 thay vì ponds[0] vì đã đảo mảng
+                    const targetPond = this.ponds.find(p => p.name === 'Ao số 1') || this.ponds[0];
+                    targetPond.ph = 6.8; targetPond.status = 'danger';
+                    this.alerts = [{
+                        id: 'alert_' + Date.now(), pondId: targetPond.id, title: 'CẢNH BÁO MỨC ĐỘ CAO',
+                        message: `Độ pH tại ${targetPond.name} giảm đột ngột xuống 6.8`,
+                        timestamp: new Date().toLocaleTimeString('vi-VN'),
+                        recommendation: 'Bật ngay quạt sục khí công suất cao và thay 10% nước để cân bằng lại môi trường.'
+                    }];
+                    this.$nextTick(() => lucide.createIcons());
+                    const bd = this.iotGetChart('overview');
+                    if (bd) {
+                        const phData = bd.data.datasets[1].data;
+                        phData[phData.length - 1] = 6.8; bd.update();
+                    }
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                },
+                executeAiAction(alertId) {
+                    const targetPond = this.ponds.find(p => p.name === 'Ao số 1') || this.ponds[0];
+                    targetPond.fan = true;
+                    setTimeout(() => {
+                        targetPond.ph = 7.6; targetPond.status = 'safe';
+                        this.alerts = this.alerts.filter(a => a.id !== alertId);
+                        this.showToast("Đã thực thi lệnh AI. Hệ thống đang ổn định lại.", "success");
+                        this.submitAILog(`Hệ thống tự động bật quạt sục khí xử lý pH thấp ở ${targetPond.name}`);
+                        const bd2 = this.iotGetChart('overview');
+                        if (bd2) {
+                            const phData = bd2.data.datasets[1].data;
+                            phData[phData.length - 1] = 7.6; bd2.update();
+                        }
+                    }, 1000);
+                },
+                startVoiceInput() { this.currentView = 'ai'; this.selectedPondId = null; this.toggleRecording(); },
+                toggleRecording() {
+                    if (this.isRecording) {
+                        this.isRecording = false; this.voiceResult = "Cho ao số 1 ăn 5 ký thức ăn.";
+                    } else {
+                        this.isRecording = true; this.voiceResult = "";
+                        setTimeout(() => { if (this.isRecording) this.toggleRecording(); }, 3000);
+                    }
+                },
+                showToast(message, type = 'success') {
+                    const id = Date.now(); this.toasts.push({ id, message, type, visible: true });
+                    setTimeout(() => { const toast = this.toasts.find(t => t.id === id); if (toast) toast.visible = false; }, 3000);
+                    setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3500);
+                },
+
+                initFinanceChart() {
+                    const ctx = document.getElementById('financePieChart');
+                    if (!ctx) return;
+
+
+                    // 1. Lọc giao dịch CHI theo Timeframe
+                    let filteredTxns = this.transactions.filter(t => t.type === 'chi');
+                    let currentD = new Date();
+
+                    if (this.financeTimeframe === 'Tháng') {
+                        filteredTxns = filteredTxns.filter(t => {
+                            let d = new Date(t.date);
+                            return d.getMonth() === currentD.getMonth() && d.getFullYear() === currentD.getFullYear();
+                        });
+                    } else if (this.financeTimeframe === 'Năm') {
+                        filteredTxns = filteredTxns.filter(t => new Date(t.date).getFullYear() === currentD.getFullYear());
+                    }
+                    // Tuần: Sẽ phức tạp hơn xíu, tạm mô phỏng lấy 7 ngày gần nhất
+                    else if (this.financeTimeframe === 'Tuần') {
+                        let weekAgo = new Date();
+                        weekAgo.setDate(weekAgo.getDate() - 7);
+                        filteredTxns = filteredTxns.filter(t => new Date(t.date) >= weekAgo);
+                    }
+
+                    // 2. Nhóm chi phí theo Danh Mục (Category)
+                    let categoryTotals = {};
+                    filteredTxns.forEach(t => {
+                        categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+                    });
+
+                    // categoryTotals['Tiền điện (Auto)'] = this.totalElectricityCost;
+
+
+                    // 3. Chuẩn bị dữ liệu cho Chart.js
+                    const labels = Object.keys(categoryTotals);
+                    const data = Object.values(categoryTotals);
+                    // Bảng màu mặc định nếu có nhiều danh mục
+                    const backgroundColors = ['#3b82f6', '#eab308', '#ef4444', '#16a34a', '#8b5cf6', '#94a3b8'];
+
+                    // Nếu không có dữ liệu, vẽ biểu đồ rỗng (màu xám)
+                    if (data.length === 0) {
+                        labels.push("Chưa có dữ liệu");
+                        data.push(1);
+                        backgroundColors.unshift('#e2e8f0');
+                    }
+
+                    this.iotSetChart('finance', new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: data,
+                                backgroundColor: backgroundColors,
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: {
+                                legend: { position: 'right', labels: { usePointStyle: true, font: { family: 'Inter', weight: 'bold' } } },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (context) {
+                                            if (context.label === 'Chưa có dữ liệu') return '0 đ';
+                                            let value = context.raw || 0;
+                                            return new Intl.NumberFormat('vi-VN').format(value) + ' đ';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }));
+                },
+
+                async initChart() {
+                    const ctx = document.getElementById('envChart'); if (!ctx) return;
+
+                    Chart.defaults.font.family = "'Inter', sans-serif"; Chart.defaults.color = '#64748b';
+
+                    // ===== DU LIEU MAC DINH (khi chua ao nao gan ESP32) =====
+                    let labels = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', 'Bây giờ'];
+                    let datasets = [
+                        { label: 'Nhiệt độ (°C)', data: [27.5, 28.0, 29.2, 30.1, 29.8, 28.5, 27.9, 28.5], yAxisID: 'yTemp', borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.08)', borderWidth: 3, tension: 0.35, fill: true },
+                        { label: 'Độ pH', data: [7.8, 7.8, 7.9, 8.0, 7.9, 7.8, 7.8, 7.8], yAxisID: 'yDo', borderColor: '#3b82f6', borderWidth: 3, tension: 0.35 }
+                    ];
+
+                    // ===== DU LIEU THAT tu ao dau tien co gan ESP32 =====
+                    const pond = this.ponds.find(p => this.iot.byPond[p.id]);
+                    if (pond) {
+                        const real = await this.iotChartData(pond.id, '1d');
+                        if (real) { labels = real.labels; datasets = real.datasets; }
+                    }
+
+                    this.iotSetChart('overview', new Chart(ctx, {
+                        type: 'line',
+                        data: { labels, datasets },
+                        options: this.iotChartOptions()
+                    }));
+                },
+                async initDetailChart() {
+                    const ctx = document.getElementById('pondDetailChart'); if (!ctx) return;
+
+
+                    // ===== DU LIEU MAC DINH (ao demo chua gan ESP32) =====
+                    let labels = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Bây giờ'];
+                    let datasets = [
+                        { label: 'Nhiệt độ (°C)', data: [27.0, 26.5, 28.0, 30.2, 29.5, 28.0, 28.5], yAxisID: 'yTemp', borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.08)', borderWidth: 3, tension: 0.35, fill: true },
+                        { label: 'Độ pH', data: [7.6, 7.5, 7.8, 8.1, 7.9, 7.7, 7.8], yAxisID: 'yDo', borderColor: '#3b82f6', borderWidth: 3, tension: 0.35 }
+                    ];
+
+                    // ===== LICH SU THAT TU ESP32 =====
+                    const pond = this.selectedPond;
+                    const real = pond ? await this.iotChartData(pond.id, this.chartTimeframe) : null;
+                    if (real) { labels = real.labels; datasets = real.datasets; }
+
+                    this.iotSetChart('detail', new Chart(ctx, {
+                        type: 'line',
+                        data: { labels, datasets },
+                        options: this.iotChartOptions()
+                    }));
+                },
+
+                /* Cap nhat bieu do CHI TIET AO theo thoi gian thuc (moi 3 giay) */
+                async refreshDetailChart() {
+                    if (!this.iotGetChart('detail') || !this.selectedPondId) return;
+                    const data = await this.iotChartData(this.selectedPondId, this.chartTimeframe);
+                    this.iotApplyChartData(this.iotGetChart('detail'), data);
+                },
+
+                /* Cap nhat bieu do TONG QUAN theo thoi gian thuc (moi 3 giay) */
+                async refreshOverviewChart() {
+                    if (!this.iotGetChart('overview')) return;
+                    const pond = this.ponds.find(p => this.iot.byPond[p.id]);
+                    if (!pond) return;                     // chua ao nao gan ESP32 -> giu bieu do demo
+                    const data = await this.iotChartData(pond.id, '1d');
+                    this.iotApplyChartData(this.iotGetChart('overview'), data);
+                },
+
+                toggleFingerprint() {
+                    if (!this.isFingerprintEnabled) {
+                        // BƯỚC 1: MỞ POP-UP YÊU CẦU QUÉT
+                        this.fingerprintStep = 'scanning';
+                        this.showFingerprintModal = true;
+
+                        // Vẽ lại icon vì vừa hiện pop-up mới
+                        this.$nextTick(() => lucide.createIcons());
+
+                        // BƯỚC 2: GIẢ LẬP QUÁ TRÌNH QUÉT TRONG 2 GIÂY
+                        this.fingerprintTimer = setTimeout(() => {
+                            this.fingerprintStep = 'success';
+                            this.isFingerprintEnabled = true; // Bật nút gạt thành màu xanh
+                            this.$nextTick(() => lucide.createIcons());
+
+                            // Tự động đóng Pop-up sau 1.5 giây nếu thành công
+                            setTimeout(() => {
+                                if (this.showFingerprintModal) {
+                                    this.showFingerprintModal = false;
+                                    this.showToast('Đã thiết lập đăng nhập bằng vân tay!', 'success');
+                                }
+                            }, 1500);
+
+                        }, 2000);
+
+                    } else {
+                        // NẾU ĐANG BẬT THÌ TẮT (Không cần pop-up)
+                        this.isFingerprintEnabled = false;
+                        this.showToast('Đã tắt tính năng đăng nhập bằng vân tay.', 'info');
+                    }
+                },
+
+                // Hàm xử lý nếu người dùng bấm "Hủy bỏ" giữa chừng
+                cancelFingerprint() {
+                    clearTimeout(this.fingerprintTimer); // Dừng giả lập quét
+                    this.showFingerprintModal = false;   // Đóng pop-up
+                    this.isFingerprintEnabled = false;   // Nút gạt vẫn tắt
+                }
+            }
+        }
+
+        document.addEventListener('alpine:init', () => { lucide.createIcons(); });
+        document.body.addEventListener('htmx:afterSwap', function () { lucide.createIcons(); });
+    </script>
+</body>
+
+</html>

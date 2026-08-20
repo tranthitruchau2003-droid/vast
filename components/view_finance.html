@@ -1,0 +1,179 @@
+<!-- ================= VIEW: SỔ SÁCH (THU CHI) ================= -->
+<div x-show="currentView === 'logs' && !selectedPondId" style="display: none;" x-transition.opacity.duration.300ms
+    class="w-full max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-black text-slate-800 flex items-center gap-2"><i data-lucide="wallet"
+                class="text-blue-600"></i> SỔ SÁCH THU CHI</h2>
+        <!-- Nút 3 gạch mở modal thống kê -->
+        <button @click="openFinanceModal()"
+            class="p-2 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 flex items-center gap-2 active:scale-95 transition-all">
+            <i data-lucide="pie-chart" class="w-5 h-5 text-blue-600"></i>
+            <span class="hidden sm:inline font-bold text-sm text-slate-700">Thống kê & Báo cáo</span>
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+        <!-- CỘT TRÁI: FORM NHẬP VÀ CÀI ĐẶT ĐIỆN NĂNG -->
+        <div class="space-y-6">
+            <!-- FORM NHẬP THU CHI THỦ CÔNG -->
+            <div class="card p-5 md:p-6 bg-white">
+                <div class="flex bg-slate-100 p-1 rounded-xl mb-6">
+                    <button @click="financeType = 'chi'"
+                        :class="financeType === 'chi' ? 'bg-white text-red-600 shadow-sm font-bold' : 'text-slate-500 font-medium'"
+                        class="flex-1 py-2 text-sm rounded-lg transition-all text-center">GHI CHI</button>
+                    <button @click="financeType = 'thu'"
+                        :class="financeType === 'thu' ? 'bg-white text-green-600 shadow-sm font-bold' : 'text-slate-500 font-medium'"
+                        class="flex-1 py-2 text-sm rounded-lg transition-all text-center">GHI THU</button>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Số tiền -->
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Số tiền (VNĐ) <span
+                                class="text-red-500">*</span></label>
+                        <input type="text" x-model="financeAmount" @input="formatCurrency()" placeholder="0"
+                            class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-black text-2xl text-right text-slate-800 transition-colors">
+                    </div>
+                    <!-- Danh mục -->
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Danh mục <span
+                                class="text-red-500">*</span></label>
+                        <select x-model="financeCategory"
+                            class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-800 appearance-none">
+                            <template x-if="financeType === 'chi'">
+                                <optgroup label="Khoản chi">
+                                    <option>Thức ăn</option>
+                                    <option>Thuốc men</option>
+                                    <option>Con giống</option>
+                                    <option>Thiết bị</option>
+                                    <option>Khác</option>
+                                </optgroup>
+                            </template>
+                            <template x-if="financeType === 'thu'">
+                                <optgroup label="Khoản thu">
+                                    <option>Bán tôm</option>
+                                    <option>Thu khác</option>
+                                </optgroup>
+                            </template>
+                        </select>
+                    </div>
+                    <!-- Ngày & Ghi chú -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-1">Ngày giao dịch</label>
+                            <input type="date" x-model="financeDate"
+                                class="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-700 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-1">Ghi chú</label>
+                            <input type="text" x-model="financeNote" placeholder="Ví dụ: Mua cám cty A"
+                                class="w-full p-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-slate-700 text-sm">
+                        </div>
+                    </div>
+
+                    <button @click="saveTransaction()"
+                        class="w-full py-4 text-white font-bold rounded-xl text-lg mt-2 transition-all active:scale-95 shadow-md"
+                        :class="financeType === 'chi' ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'">
+                        LƯU GIAO DỊCH
+                    </button>
+                </div>
+            </div>
+
+            <!-- CÀI ĐẶT CHI PHÍ ĐIỆN NĂNG -->
+            <div class="card p-5 bg-amber-50/50 border-amber-100">
+                <h3 class="font-bold text-lg text-amber-800 mb-3 flex items-center gap-2">
+                    <i data-lucide="zap" class="w-5 h-5 text-amber-500"></i> Chi phí Điện năng (Tự động)
+                </h3>
+                <div
+                    class="flex justify-between items-center bg-white p-4 rounded-2xl border border-amber-200 shadow-sm">
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Giá điện hiện tại</p>
+                        <p class="font-black text-xl text-slate-800 mt-1"><span
+                                x-text="formatNumber(electricityPrice)"></span> <span
+                                class="text-sm font-bold text-slate-500">đ/kWh</span></p>
+                    </div>
+                    <button @click="updateElectricityPrice()"
+                        class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all">
+                        Cập nhật
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CỘT PHẢI: LỊCH SỬ GẦN ĐÂY VÀ TỔNG SỐ DƯ -->
+        <div class="card p-5 md:p-6 bg-slate-50/50 flex flex-col h-full">
+            <h3 class="font-bold text-lg text-slate-800 mb-4 border-b border-slate-200 pb-2">Giao dịch gần đây</h3>
+
+            <!-- Danh sách -->
+            <div class="space-y-3 flex-1 overflow-y-auto max-h-64 no-scrollbar">
+                <template x-for="txn in transactions.slice().reverse().slice(0, 5)" :key="txn.id">
+                    <div
+                        class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0"
+                                :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
+                                <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
+                                    class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <p class="font-bold text-slate-800" x-text="txn.category"></p>
+                                <p class="text-[11px] text-slate-500 font-medium truncate w-32 md:w-40"
+                                    x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <p class="font-black text-right"
+                                :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
+                                x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+
+                            <!-- NÚT 3 CHẤM MỚI THÊM VÀO ĐÂY -->
+                            <button @click="openEditTransaction(txn)"
+                                class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95">
+                                <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="transactions.length === 0">
+                    <div class="text-center py-8 text-slate-400 font-medium text-sm">Chưa có giao dịch nào.</div>
+                </template>
+            </div>
+
+            <!-- Nút Xem tất cả -->
+            <button @click="showAllTransactionsModal = true"
+                class="w-full mt-2 mb-4 py-2 text-blue-600 font-bold text-sm bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">
+                Xem tất cả giao dịch
+            </button>
+
+            <!-- KHỐI TỔNG KẾT ĐIỆN VÀ SỐ DƯ -->
+            <div class="mt-auto space-y-3 pt-4 border-t-2 border-dashed border-slate-200">
+                <div class="flex justify-between items-center p-3.5 bg-amber-50 border border-amber-200 rounded-2xl">
+                    <div class="flex items-center gap-2">
+                        <div class="p-1.5 bg-amber-200 rounded-lg text-amber-700"><i data-lucide="zap"
+                                class="w-5 h-5"></i></div>
+                        <div>
+                            <p class="font-bold text-amber-900 text-sm">Tiền điện tổng thiết bị</p>
+                            <p class="text-[11px] text-amber-700 font-medium">Đo tự động (<span
+                                    x-text="formatNumber(totalKwhConsumed)"></span> kWh)</p>
+                        </div>
+                    </div>
+                    <span class="font-black text-lg text-amber-700"
+                        x-text="'-' + formatNumber(totalElectricityCost) + ' đ'"></span>
+                </div>
+
+                <!-- Ô TỔNG SỐ DƯ ĐÃ ĐỔI SANG MÀU XANH LÁ CHUYÊN NGHIỆP -->
+                <div
+                    class="flex flex-col justify-center items-center p-5 bg-green-600 rounded-2xl shadow-lg shadow-green-200 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-24 h-24 bg-white/20 rounded-full -mr-10 -mt-10 blur-xl"></div>
+                    <div class="absolute bottom-0 left-0 w-16 h-16 bg-black/10 rounded-full -ml-8 -mb-8 blur-lg"></div>
+
+                    <span class="font-bold text-green-100 text-xs uppercase tracking-widest mb-1 z-10">Tổng Số Dư Hiện
+                        Tại</span>
+                    <span class="font-black text-3xl text-white z-10 tracking-tight"
+                        x-text="formatNumber(calculateBalance()) + ' đ'"></span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
