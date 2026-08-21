@@ -1133,6 +1133,34 @@
         </div>
     </div>
 
+    <!-- MODAL XÁC NHẬN XÓA GIAO DỊCH -->
+    <div x-show="showDeleteTxnModal"
+        class="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showDeleteTxnModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="p-6 text-center">
+                <div
+                    class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="trash-2" class="w-8 h-8"></i>
+                </div>
+                <h3 class="font-black text-xl text-slate-800 mb-2">Xóa Giao Dịch</h3>
+                <p class="text-slate-600 text-sm font-medium">Bạn có chắc chắn muốn xóa khoản thu/chi này không? Dữ liệu
+                    không thể khôi phục.</p>
+            </div>
+            <div class="p-4 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showDeleteTxnModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95">Hủy
+                    bỏ</button>
+                <button @click="executeDeleteTransaction()"
+                    class="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-200 active:scale-95">Xóa
+                    ngay</button>
+            </div>
+        </div>
+    </div>
+
     <!-- JAVASCRIPT LOGIC -->
     <script>
         function farmApp() {
@@ -1192,6 +1220,8 @@
                 editTxnAmount: '',
                 editTxnType: 'chi',
                 editTxnNote: '',
+                showDeleteTxnModal: false,
+                deletingTxnId: null,
                 // ...
                 // Biến trạng thái Modal
                 showErrorModal: false, // Biến bật/tắt pop-up lỗi
@@ -1371,6 +1401,30 @@
                     // Vẽ lại biểu đồ vì số tiền vừa bị thay đổi
                     this.$nextTick(() => { this.initFinanceChart(); lucide.createIcons(); });
                 },
+
+                // Mở pop-up xác nhận xóa
+                promptDeleteTransaction(id) {
+                    this.deletingTxnId = id;
+                    this.showDeleteTxnModal = true;
+                },
+
+                // Thực thi việc xóa dữ liệu
+                executeDeleteTransaction() {
+                    // Lọc bỏ giao dịch có ID trùng khớp
+                    this.transactions = this.transactions.filter(t => t.id !== this.deletingTxnId);
+
+                    // Đóng pop-up và dọn dẹp
+                    this.showDeleteTxnModal = false;
+                    this.deletingTxnId = null;
+                    this.showToast('Đã xóa giao dịch thành công!', 'success');
+
+                    // Cập nhật lại biểu đồ và Icon
+                    this.$nextTick(() => {
+                        this.initFinanceChart();
+                        lucide.createIcons();
+                    });
+                },
+
                 formatNumber(num) {
 
                     return new Intl.NumberFormat('vi-VN').format(num);

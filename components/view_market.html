@@ -27,18 +27,22 @@
             </p>
 
             <div
-                class="bg-white/10 p-5 rounded-2xl border border-white/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
-                    <p class="text-sm text-blue-100 font-medium mb-1">Dự kiến nuôi thêm 12 ngày:</p>
-                    <div class="flex gap-4">
-                        <p class="text-sm"><span class="text-blue-200">Chi phí cám:</span> <b class="text-white">~15
-                                Triệu</b></p>
-                        <p class="text-sm"><span class="text-blue-200">Doanh thu tăng:</span> <b
-                                class="text-green-300">~45 Triệu</b></p>
+                class="bg-white/10 p-5 rounded-2xl border border-white/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mt-4">
+                <div class="w-full md:w-auto"> <!-- Thêm w-full cho mobile -->
+                    <p class="text-sm text-blue-100 font-medium mb-2">Dự kiến nuôi thêm 12 ngày:</p>
+                    <!-- ĐỔI TỪ flex gap-4 THÀNH: -->
+                    <div class="flex flex-col sm:flex-row sm:gap-6 gap-2">
+                        <p
+                            class="text-sm flex justify-between sm:block w-full sm:w-auto border-b border-white/10 pb-1 sm:border-0 sm:pb-0">
+                            <span class="text-blue-200">Chi phí cám:</span> <b class="text-white">~15 Triệu</b>
+                        </p>
+                        <p class="text-sm flex justify-between sm:block w-full sm:w-auto">
+                            <span class="text-blue-200">Doanh thu tăng:</span> <b class="text-green-300">~45 Triệu</b>
+                        </p>
                     </div>
                 </div>
                 <button
-                    class="w-full md:w-auto px-6 py-3 bg-white text-indigo-700 font-black rounded-xl hover:bg-blue-50 transition-colors active:scale-95 shadow-lg">
+                    class="w-full md:w-auto px-6 py-3 mt-2 md:mt-0 bg-white text-indigo-700 font-black rounded-xl hover:bg-blue-50 transition-colors active:scale-95 shadow-lg whitespace-nowrap">
                     Giữ lại nuôi tiếp
                 </button>
             </div>

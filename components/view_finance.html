@@ -109,37 +109,52 @@
                 <template x-for="txn in transactions.slice().reverse().slice(0, 5)" :key="txn.id">
                     <div
                         class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
-                        <!-- CỘT TRÁI: Dùng flex-1 min-w-0 để tự động thu hẹp và thêm dấu ... nếu ghi chú quá dài -->
+
+                        <!-- Cột Trái: Icon và Text (Cho phép thu hẹp) -->
                         <div class="flex items-center gap-3 flex-1 min-w-0 mr-2">
                             <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0"
                                 :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
                                 <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
                                     class="w-5 h-5"></i>
                             </div>
-                            <div class="flex-1 min-w-0">
+                            <div class="flex-1 min-w-0"> <!-- Thêm flex-1 min-w-0 ở đây -->
                                 <p class="font-bold text-slate-800 truncate" x-text="txn.category"></p>
                                 <p class="text-[11px] text-slate-500 font-medium truncate"
                                     x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
                             </div>
                         </div>
 
-                        <!-- CỘT PHẢI: Dùng shrink-0 và whitespace-nowrap để bảo vệ số tiền không bị ép rớt dòng -->
-                        <div class="flex items-center gap-1 shrink-0">
-                            <p class="font-black text-right whitespace-nowrap text-sm sm:text-base"
+                        <!-- Cột Phải: Số tiền và Nút sửa (Không cho phép rớt dòng) -->
+                        <div class="flex items-center gap-1 shrink-0 whitespace-nowrap">
+                            <p class="font-black text-right text-sm sm:text-base"
                                 :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
                                 x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
 
-                            <!-- Nút 3 chấm -->
-                            <button @click="openEditTransaction(txn)"
-                                class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95 shrink-0">
-                                <i data-lucide="more-vertical" class="w-5 h-5"></i>
-                            </button>
+                            <!-- Nút menu dấu 3 chấm (Dạng Dropdown Sửa/Xóa) -->
+                            <div class="relative shrink-0" x-data="{ openTxnMenu: false }">
+                                <button @click="openTxnMenu = !openTxnMenu"
+                                    class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95">
+                                    <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                                </button>
+                                <!-- Bảng menu hiện ra khi bấm -->
+                                <div x-show="openTxnMenu" @click.away="openTxnMenu = false" style="display: none;"
+                                    class="absolute right-0 mt-2 w-36 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50">
+
+                                    <button @click="openTxnMenu = false; openEditTransaction(txn)"
+                                        class="w-full px-4 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
+                                        <i data-lucide="edit-3" class="w-4 h-4 text-blue-600"></i> Chỉnh sửa
+                                    </button>
+
+                                    <button @click="openTxnMenu = false; promptDeleteTransaction(txn.id)"
+                                        class="w-full px-4 py-2.5 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i> Xóa
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </template>
-                <template x-if="transactions.length === 0">
-                    <div class="text-center py-8 text-slate-400 font-medium text-sm">Chưa có giao dịch nào.</div>
-                </template>
+                <!-- ... -->
             </div>
 
             <!-- Nút Xem tất cả -->
@@ -151,16 +166,17 @@
             <!-- KHỐI TỔNG KẾT ĐIỆN VÀ SỐ DƯ -->
             <div class="mt-auto space-y-3 pt-4 border-t-2 border-dashed border-slate-200">
                 <div class="flex justify-between items-center p-3.5 bg-amber-50 border border-amber-200 rounded-2xl">
-                    <div class="flex items-center gap-2">
-                        <div class="p-1.5 bg-amber-200 rounded-lg text-amber-700"><i data-lucide="zap"
+                    <div class="flex items-center gap-2 flex-1 min-w-0 mr-2"> <!-- Cập nhật class ở đây -->
+                        <div class="p-1.5 bg-amber-200 rounded-lg text-amber-700 shrink-0"><i data-lucide="zap"
                                 class="w-5 h-5"></i></div>
-                        <div>
-                            <p class="font-bold text-amber-900 text-sm">Tiền điện tổng thiết bị</p>
-                            <p class="text-[11px] text-amber-700 font-medium">Đo tự động (<span
+                        <div class="min-w-0"> <!-- Thêm min-w-0 -->
+                            <p class="font-bold text-amber-900 text-sm truncate">Tiền điện tổng thiết bị</p>
+                            <!-- Thêm truncate -->
+                            <p class="text-[11px] text-amber-700 font-medium truncate">Đo tự động (<span
                                     x-text="formatNumber(totalKwhConsumed)"></span> kWh)</p>
                         </div>
                     </div>
-                    <span class="font-black text-lg text-amber-700"
+                    <span class="font-black text-base sm:text-lg text-amber-700 shrink-0 whitespace-nowrap"
                         x-text="'-' + formatNumber(totalElectricityCost) + ' đ'"></span>
                 </div>
 
