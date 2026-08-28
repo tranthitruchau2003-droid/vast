@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truy xuất nguồn gốc tôm — VAST</title>
+
+    <!-- ================================================================
+         TRANG CONG KHAI - nguoi mua tom quet ma QR se vao thang day.
+         KHONG can dang nhap. KHONG hien bat ky thong tin ca nhan hay
+         so sach thu chi nao cua chu ao.
+
+         Nguyen tac trinh bay:
+           - Tach ro SO LIEU MAY GHI (dang tin) va SO LIEU NGUOI KHAI
+           - Canh bao ngung thuoc hien TREN CUNG, mau do, khong giau
+           - Khong dan nhan "Blockchain Verified" gia
+         ================================================================ -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: white !important;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+
+    <div id="app" class="max-w-3xl mx-auto p-4 md:p-6">
+
+        <!-- ĐANG TẢI -->
+        <div id="loading" class="py-20 text-center">
+            <div class="inline-block w-10 h-10 border-4 border-slate-200 border-t-green-600 rounded-full animate-spin">
+            </div>
+            <p class="mt-4 text-slate-500 font-medium">Đang tra cứu hồ sơ…</p>
+        </div>
+
+        <!-- LỖI -->
+        <div id="error" class="hidden py-16 text-center">
+            <div class="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
+                <i data-lucide="search-x" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
+                <h1 class="text-xl font-black text-slate-800 mb-2">Không tra cứu được</h1>
+                <p id="error-msg" class="text-slate-500 font-medium"></p>
+            </div>
+        </div>
+
+        <!-- NỘI DUNG -->
+        <div id="content" class="hidden space-y-4"></div>
+    </div>
+
+    <script>
+        // ================================================================
+        // Doc ma tu duong dan:  trace.html?code=VAST-XXXX
+        // ================================================================
+        const params = new URLSearchParams(location.search);
+        const code = (params.get('code') || '').trim().toUpperCase();
+
+        const el = id => document.getElementById(id);
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        /** So kieu Viet Nam. */
+        const num = v => (Number.isFinite(Number(v))
+            ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(Number(v))
+            : '—');
+
+        /** Ngay dd/mm/yyyy. Tra "—" khi khong co, KHONG bao gio bia. */
+        const ngay = s => {
+            if (!s) return '—';
+            const d = new Date(s);
+            if (isNaN(d)) return esc(s);
+            return d.toLocaleDateString('vi-VN');
+        };
+        const ngayGio = s => {
+            if (!s) return '—';
+            const d = new Date(s);
+            if (isNaN(d)) return esc(s);
+            return d.toLocaleDateString('vi-VN') + ' ' +
+                d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        };
+
+        /** Mot dong "Nhan: Gia tri". Bo qua han neu khong co gia tri. */
+        function dong(nhan, giaTri, opts = {}) {
+            if (giaTri === null || giaTri === undefined || giaTri === '' || giaTri === '—') {
+                if (!opts.luonHien) return '';
+                giaTri = '—';
+            }
+            return `<div class="flex justify-between gap-4 py-2 border-b border-slate-100 last:border-0">
+                        <span class="text-sm text-slate-500 font-medium shrink-0">${esc(nhan)}</span>
+                        <span class="text-sm font-bold text-slate-800 text-right ${opts.cls || ''}">${opts.raw ? giaTri : esc(giaTri)}</span>
+                    </div>`;
+        }
+
+        function the(tieuDe, icon, mau, noiDung, phu) {
+            return `<section class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-${mau}-50 text-${mau}-600 flex items-center justify-center shrink-0">
+                        <i data-lucide="${icon}" class="w-5 h-5"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h2 class="font-black text-slate-800">${esc(tieuDe)}</h2>
+                        ${phu ? `<p class="text-[11px] text-slate-400 font-semibold">${esc(phu)}</p>` : ''}
+                    </div>
+                </div>
+                <div class="p-5">${noiDung}</div>
+            </section>`;
+        }
+
+        // ================================================================
+        async function tra() {
+            if (!code) {
+                el('loading').classList.add('hidden');
+                el('error').classList.remove('hidden');
+                el('error-msg').textContent = 'Thiếu mã truy xuất trên đường dẫn.';
+                lucide.createIcons();
+                return;
+            }
+
+            let d;
+            try {
+                const r = await fetch(`/api/trace?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
+                d = await r.json();
+                if (!r.ok || !d.ok) throw new Error(d.error || 'Không tra cứu được');
+            } catch (e) {
+                el('loading').classList.add('hidden');
+                el('error').classList.remove('hidden');
+                el('error-msg').textContent = e.message;
+                lucide.createIcons();
+                return;
+            }
+
+            ve(d);
+            el('loading').classList.add('hidden');
+            el('content').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        // ================================================================
+        function ve(d) {
+            const v = d.vung_nuoi || {};
+            const q = d.qua_trinh_nuoi || {};
+            const nt = q.ngung_thuoc || {};
+            const np = d.niem_phong || {};
+            const out = [];
+
+            // ---------- TIÊU ĐỀ ----------
+            out.push(`
+            <header class="bg-gradient-to-br from-green-600 to-emerald-700 rounded-3xl p-6 text-white shadow-lg">
+                <div class="flex items-center gap-2 mb-3">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-green-200"></i>
+                    <span class="text-xs font-black uppercase tracking-wider text-green-100">Truy xuất nguồn gốc</span>
+                </div>
+                <h1 class="text-2xl font-black mb-1">${esc(v.ten_ao || 'Ao nuôi')}</h1>
+                <p class="text-green-100 font-medium">${esc(v.ho_nuoi || '')}</p>
+                <div class="mt-4 pt-4 border-t border-white/20 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                    <div>
+                        <div class="text-[11px] text-green-200 font-bold uppercase">Mã cơ sở nuôi</div>
+                        <div class="font-black">${esc(v.ma_co_so_nuoi || 'Chưa khai báo')}</div>
+                    </div>
+                    <div>
+                        <div class="text-[11px] text-green-200 font-bold uppercase">Mã nội bộ</div>
+                        <div class="font-black">${esc(v.ma_noi_bo || '—')}</div>
+                    </div>
+                </div>
+            </header>`);
+
+            // ---------- CẢNH BÁO NGỪNG THUỐC (lên trên cùng, không giấu) ----------
+            for (const c of (nt.canh_bao || [])) {
+                out.push(`
+                <div class="bg-red-50 border-2 border-red-300 rounded-2xl p-5 flex items-start gap-3">
+                    <i data-lucide="alert-octagon" class="w-6 h-6 text-red-600 shrink-0 mt-0.5"></i>
+                    <div>
+                        <div class="font-black text-red-800 mb-1">CẢNH BÁO TỒN DƯ KHÁNG SINH</div>
+                        <p class="text-sm text-red-700 font-medium leading-relaxed">${esc(c.noi_dung)}</p>
+                        <p class="text-sm text-red-800 font-bold mt-2">Thu hoạch sớm hơn ${esc(c.thieu_ngay)} ngày so với quy định ngừng thuốc.</p>
+                    </div>
+                </div>`);
+            }
+
+            // ---------- KIỂM NGHIỆM KHÔNG ĐẠT ----------
+            const truot = (d.kiem_nghiem || []).filter(t => !t.dat);
+            if (truot.length) {
+                out.push(`
+                <div class="bg-red-50 border-2 border-red-300 rounded-2xl p-5 flex items-start gap-3">
+                    <i data-lucide="flask-conical-off" class="w-6 h-6 text-red-600 shrink-0 mt-0.5"></i>
+                    <div>
+                        <div class="font-black text-red-800 mb-1">CÓ CHỈ TIÊU KIỂM NGHIỆM KHÔNG ĐẠT</div>
+                        <ul class="text-sm text-red-700 font-medium space-y-1 mt-1">
+                            ${truot.map(t => `<li>• ${esc(t.chi_tieu)}: ${esc(t.ket_qua)} ${esc(t.don_vi || '')} (giới hạn ${esc(t.gioi_han || '—')})</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>`);
+            }
+
+            // ---------- NIÊM PHONG BỊ PHÁ ----------
+            if (np.nguyen_ven === false) {
+                out.push(`
+                <div class="bg-red-50 border-2 border-red-300 rounded-2xl p-5 flex items-start gap-3">
+                    <i data-lucide="file-warning" class="w-6 h-6 text-red-600 shrink-0 mt-0.5"></i>
+                    <div>
+                        <div class="font-black text-red-800 mb-1">HỒ SƠ ĐÃ BỊ SỬA SAU KHI LƯU</div>
+                        <p class="text-sm text-red-700 font-medium leading-relaxed">
+                            Phát hiện ${esc((np.ban_ghi_bat_thuong || []).length)} bản ghi không còn khớp với dấu niêm phong ban đầu.
+                            Không nên dùng hồ sơ này để đối chiếu.
+                        </p>
+                    </div>
+                </div>`);
+            }
+
+            // ---------- 1. VÙNG NUÔI ----------
+            out.push(the('1. Thông tin vùng nuôi', 'map-pin', 'blue',
+                dong('Tên ao', v.ten_ao) +
+                dong('Hộ nuôi / Hợp tác xã', v.ho_nuoi) +
+                dong('Mã cơ sở nuôi (chính thức)', v.ma_co_so_nuoi) +
+                dong('Mã nội bộ hệ thống', v.ma_noi_bo) +
+                dong('Tọa độ GPS', v.gps) +
+                dong('Diện tích', v.dien_tich_m2 ? num(v.dien_tich_m2) + ' m²' : null) +
+                `<p class="mt-3 text-[11px] text-slate-500 font-medium leading-relaxed bg-slate-50 p-3 rounded-xl">
+                    ${esc(v.ghi_chu_ma || '')}
+                 </p>`
+            ));
+
+            // ---------- 2. ĐẦU VÀO ----------
+            const dv = d.dau_vao || {};
+            const tenNhom = { giong: 'Con giống', thuc_an: 'Thức ăn', xu_ly: 'Chất xử lý môi trường', thuoc: 'Thuốc' };
+            let htmlDauVao = '';
+            for (const [k, items] of Object.entries(dv)) {
+                if (!items || !items.length) continue;
+                htmlDauVao += `<div class="mb-4 last:mb-0">
+                    <div class="text-[11px] font-black text-slate-400 uppercase tracking-wide mb-2">${esc(tenNhom[k] || k)}</div>`;
+                for (const i of items) {
+                    htmlDauVao += `<div class="bg-slate-50 rounded-xl p-3 mb-2 border border-slate-100">
+                        <div class="font-bold text-slate-800 text-sm">${esc(i.ten)}</div>
+                        ${i.nha_cung_cap ? `<div class="text-xs text-slate-500 font-medium mt-0.5">Nhà cung cấp: ${esc(i.nha_cung_cap)}</div>` : ''}
+                        ${i.ma_lo ? `<div class="text-xs text-slate-500 font-medium">Mã lô: <b class="text-slate-700">${esc(i.ma_lo)}</b></div>` : ''}
+                        ${i.hoat_chat ? `<div class="text-xs text-slate-500 font-medium">Hoạt chất: ${esc(i.hoat_chat)}</div>` : ''}
+                        ${i.so_luong ? `<div class="text-xs text-slate-500 font-medium">Số lượng: ${num(i.so_luong)} ${esc(i.don_vi || '')}</div>` : ''}
+                        ${i.ngay_dung ? `<div class="text-xs text-slate-500 font-medium">Ngày dùng: ${ngay(i.ngay_dung)}</div>` : ''}
+                        ${i.ngung_truoc_thu_hoach_ngay ? `<div class="text-xs font-bold text-amber-700 mt-1">Ngừng ${esc(i.ngung_truoc_thu_hoach_ngay)} ngày trước thu hoạch</div>` : ''}
+                        ${i.ghi_chu ? `<div class="text-[11px] text-slate-400 mt-1">${esc(i.ghi_chu)}</div>` : ''}
+                    </div>`;
+                }
+                htmlDauVao += `</div>`;
+            }
+            if (!htmlDauVao) htmlDauVao = '<p class="text-sm text-slate-400 font-medium">Chưa có thông tin đầu vào.</p>';
+            out.push(the('2. Thông tin đầu vào', 'package-search', 'amber', htmlDauVao, 'Do cơ sở nuôi khai báo'));
+
+            // ---------- 3. QUÁ TRÌNH NUÔI ----------
+            let htmlNuoi =
+                dong('Ngày thả giống', ngay(q.ngay_tha)) +
+                dong('Số ngày nuôi', q.so_ngay_nuoi ? q.so_ngay_nuoi + ' ngày' : null) +
+                dong('Số lượng thả', q.so_luong_tha ? num(q.so_luong_tha) + ' con' : null) +
+                dong('Cỡ tôm hiện tại', q.co_tom_hien_tai) +
+                dong('Trọng lượng trung bình', q.trong_luong_tb_g ? num(q.trong_luong_tb_g) + ' g/con' : null) +
+                dong('Tổng cám đã cho ăn', q.tong_cam_da_cho_an_kg ? num(q.tong_cam_da_cho_an_kg) + ' kg' : null) +
+                dong('Số lần cho ăn ghi nhận', q.so_lan_cho_an || null);
+
+            if (nt.co_dung_thuoc) {
+                htmlNuoi += `<div class="mt-4 p-4 rounded-xl border ${(nt.canh_bao || []).length ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}">
+                    <div class="text-xs font-black uppercase tracking-wide mb-2 ${(nt.canh_bao || []).length ? 'text-red-700' : 'text-amber-700'}">
+                        Thời gian ngừng thuốc
+                    </div>
+                    <div class="text-sm font-bold ${(nt.canh_bao || []).length ? 'text-red-800' : 'text-amber-800'}">
+                        Được thu hoạch sớm nhất từ: ${ngay(nt.ngay_duoc_thu_som_nhat)}
+                    </div>
+                    ${(nt.chi_tiet || []).map(c => `
+                        <div class="text-xs mt-2 ${(nt.canh_bao || []).length ? 'text-red-700' : 'text-amber-700'} font-medium">
+                            • ${esc(c.ten)}${c.hoat_chat ? ` (${esc(c.hoat_chat)})` : ''} — dùng ${ngay(c.ngay_dung)}, ngừng ${esc(c.ngung_ngay)} ngày → an toàn từ ${ngay(c.duoc_thu_tu)}
+                        </div>`).join('')}
+                </div>`;
+            }
+
+            if ((q.lich_cho_an_gan_nhat || []).length) {
+                htmlNuoi += `<div class="mt-4">
+                    <div class="text-[11px] font-black text-slate-400 uppercase tracking-wide mb-2">Lịch cho ăn gần nhất</div>
+                    <div class="space-y-1">
+                    ${q.lich_cho_an_gan_nhat.map(l => `
+                        <div class="flex justify-between text-xs bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                            <span class="text-slate-600 font-medium">${ngayGio(l.luc)}</span>
+                            <span class="font-bold text-slate-800">${num(l.kg)} kg <span class="text-slate-400 font-medium">· ${esc(l.kieu)}</span></span>
+                        </div>`).join('')}
+                    </div>
+                </div>`;
+            }
+
+            out.push(the('3. Quá trình chăm sóc', 'clipboard-list', 'green', htmlNuoi));
+
+            // ---------- CHẤT LƯỢNG NƯỚC (máy tự ghi) ----------
+            const n = d.chat_luong_nuoc;
+            if (n) {
+                const oNuoc = (ten, o, dv2) => o ? `
+                    <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
+                        <div class="text-[11px] font-bold text-slate-400 uppercase">${esc(ten)}</div>
+                        <div class="text-lg font-black text-slate-800 mt-0.5">${num(o.tb)}<span class="text-xs font-semibold text-slate-400 ml-0.5">${esc(dv2)}</span></div>
+                        <div class="text-[10px] text-slate-400 font-medium">${num(o.thap_nhat)} – ${num(o.cao_nhat)}</div>
+                    </div>` : '';
+                out.push(the('Chất lượng nước', 'droplets', 'cyan',
+                    `<div class="grid grid-cols-3 gap-2">
+                        ${oNuoc('Nhiệt độ', n.nhiet_do, '°C')}
+                        ${oNuoc('Oxy hòa tan', n.oxy_hoa_tan, 'mg/L')}
+                        ${oNuoc('pH', n.ph, '')}
+                    </div>
+                    <p class="mt-3 text-[11px] text-slate-500 font-medium">
+                        ${esc(n.khoang)} · ${num(n.so_diem_do)} điểm đo · thiết bị ${esc(n.thiet_bi)}
+                    </p>`,
+                    'Thiết bị IoT tại ao tự ghi'));
+            }
+
+            // ---------- 4. CHẾ BIẾN & LOGISTICS ----------
+            let htmlLo = '';
+            for (const h of (d.che_bien || [])) {
+                htmlLo += `<div class="bg-slate-50 rounded-xl p-4 mb-3 border border-slate-100">
+                    <div class="font-black text-slate-800">Lô ${esc(h.so_lo_che_bien || '#' + h.id)}</div>
+                    ${dong('Thu hoạch lúc', ngayGio(h.thu_luc))}
+                    ${dong('Sản lượng', h.san_luong_kg ? num(h.san_luong_kg) + ' kg' : null)}
+                    ${dong('Cỡ tôm', h.co_tom)}
+                    ${dong('Nhà máy chế biến', h.nha_may)}
+                    ${dong('Mã nhà máy', h.ma_nha_may)}
+                    ${dong('Bên mua', h.ben_mua)}
+                </div>`;
+            }
+
+            for (const t of (d.kiem_nghiem || [])) {
+                htmlLo += `<div class="rounded-xl p-4 mb-3 border ${t.dat ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="font-black ${t.dat ? 'text-green-800' : 'text-red-800'}">${esc(t.chi_tieu)}</div>
+                        <span class="text-[11px] font-black px-2 py-1 rounded-lg ${t.dat ? 'bg-green-200 text-green-900' : 'bg-red-200 text-red-900'}">
+                            ${t.dat ? 'ĐẠT' : 'KHÔNG ĐẠT'}
+                        </span>
+                    </div>
+                    ${dong('Kết quả', `${t.ket_qua ?? '—'} ${t.don_vi || ''}`.trim())}
+                    ${dong('Giới hạn cho phép', t.gioi_han)}
+                    ${dong('Đơn vị kiểm nghiệm', t.don_vi_kiem)}
+                    ${dong('Số phiếu', t.so_phieu)}
+                    ${dong('Ngày kiểm', ngay(t.ngay_kiem))}
+                </div>`;
+            }
+
+            for (const s of (d.van_chuyen || [])) {
+                htmlLo += `<div class="bg-slate-50 rounded-xl p-4 mb-3 border border-slate-100">
+                    <div class="font-black text-slate-800 mb-1">Vận chuyển</div>
+                    ${dong('Tuyến', s.tuyen)}
+                    ${dong('Cảng xuất khẩu', s.cang_xuat)}
+                    ${dong('Thị trường đến', s.thi_truong)}
+                    ${dong('Số container', s.so_container)}
+                    ${dong('Đi lúc', ngayGio(s.di_luc))}
+                </div>`;
+            }
+
+            if (!htmlLo) htmlLo = '<p class="text-sm text-slate-400 font-medium">Lô này chưa thu hoạch.</p>';
+            out.push(the('4. Chế biến & vận chuyển', 'ship', 'purple', htmlLo, 'Do cơ sở nuôi khai báo'));
+
+            // ---------- ĐỘ TIN CẬY ----------
+            const dtc = d.do_tin_cay || {};
+            out.push(`
+            <section class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+                <h2 class="font-black text-slate-800 mb-3 flex items-center gap-2">
+                    <i data-lucide="scale" class="w-5 h-5 text-slate-400"></i> Số liệu này từ đâu ra
+                </h2>
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+                        <div class="text-xs font-black text-green-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                            <i data-lucide="cpu" class="w-4 h-4"></i> Máy tự ghi
+                        </div>
+                        <ul class="text-xs text-green-800 font-medium space-y-1">
+                            ${(dtc.may_tu_ghi || []).map(x => `<li>• ${esc(x)}</li>`).join('')}
+                        </ul>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div class="text-xs font-black text-amber-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                            <i data-lucide="pencil" class="w-4 h-4"></i> Người khai báo
+                        </div>
+                        <ul class="text-xs text-amber-800 font-medium space-y-1">
+                            ${(dtc.nguoi_khai_bao || []).map(x => `<li>• ${esc(x)}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-500 font-medium leading-relaxed mt-3">${esc(dtc.ghi_chu || '')}</p>
+            </section>`);
+
+            // ---------- NIÊM PHONG ----------
+            out.push(`
+            <section class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5">
+                <div class="flex items-center gap-2 mb-3">
+                    <i data-lucide="${np.nguyen_ven ? 'shield-check' : 'shield-alert'}"
+                       class="w-5 h-5 ${np.nguyen_ven ? 'text-green-600' : 'text-red-600'}"></i>
+                    <h2 class="font-black text-slate-800">Dấu niêm phong hồ sơ</h2>
+                    <span class="ml-auto text-[11px] font-black px-2 py-1 rounded-lg ${np.nguyen_ven ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}">
+                        ${np.nguyen_ven ? 'NGUYÊN VẸN' : 'ĐÃ BỊ SỬA'}
+                    </span>
+                </div>
+                ${dong('Số bản ghi', np.so_ban_ghi, { luonHien: true })}
+                ${dong('Mã niêm phong hiện tại', np.dau_hien_tai ? np.dau_hien_tai.slice(0, 32) + '…' : null)}
+                <p class="text-[11px] text-slate-500 font-medium leading-relaxed mt-3 bg-slate-50 p-3 rounded-xl">
+                    ${esc(np.cach_hoat_dong || '')}
+                </p>
+            </section>`);
+
+            // ---------- CHÂN TRANG ----------
+            out.push(`
+            <footer class="text-center py-6 text-[11px] text-slate-400 font-medium">
+                <p>Mã tra cứu: <b class="text-slate-600">${esc(d.ma_truy_xuat)}</b></p>
+                <p class="mt-1">Số liệu tính lúc ${ngayGio(d.tinh_luc)}${d.tu_bo_nho_dem ? ' (từ bộ nhớ đệm)' : ''}</p>
+                <button onclick="window.print()" class="no-print mt-3 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50">
+                    In hồ sơ
+                </button>
+            </footer>`);
+
+            el('content').innerHTML = out.join('');
+        }
+
+        tra();
+    </script>
+</body>
+
+</html>

@@ -76,6 +76,9 @@ void kiemTraWifi();
 void guiTelemetry();
 void layLenhTuServer();
 void guiAck(int commandId);
+
+// ===== MAY CHO AN TU DONG 2 MOTOR (them moi) =====
+#include "feeder.h"
 void inTrangThai();
 
 // ================================================================================
@@ -100,6 +103,7 @@ float congSuat  = NAN;    // W
 
 bool ina219OK   = false;
 bool ds18b20OK  = false;
+bool doOK       = true;    // cam bien DO (bien tro B10K) con noi day khong
 
 // --- Relay (bien nay la SU THAT ve trang thai chan ra) ---
 bool guongDangBat = false;   // GPIO26
@@ -124,6 +128,7 @@ unsigned long tSensor = 0, tTemp = 0, tTelemetry = 0, tCommand = 0, tPrint = 0, 
 // --- Gia tri cua LAN GUI GAN NHAT (de biet co gi thay doi khong) ---
 float doGuiLanCuoi     = NAN;
 float nhietDoGuiLanCuoi = NAN;
+bool  daGuiLanNao      = false;   // da gui duoc goi telemetry nao chua
 bool  guongGuiLanCuoi  = false;
 bool  bomGuiLanCuoi    = false;
 CheDo cheDoGuiLanCuoi  = CHE_DO_AUTO;
@@ -209,6 +214,12 @@ void setup() {
   Serial.println();
 
   lanCuoiServerOK = millis();
+
+  // ===== MAY CHO AN TU DONG =====
+  // Dat o CUOI setup(): chan motor duoc keo ve TAT ngay khi vua co dien,
+  // truoc do GPIO o trang thai bat dinh, may co the tu xa cam.
+  feederSetup();
+
 }
 
 
@@ -258,6 +269,13 @@ void loop() {
     }
   }
 
+  // 6) MAY CHO AN TU DONG
+  //    Ham nay CHI xem dong ho roi thoat ngay - khong bao gio chan chuong trinh.
+  //    Nho vay logic an toan ao o buoc 1 van chay dung nhip 250ms ke ca
+  //    trong luc vit tai dang quay hang chuc giay.
+  feederLoop();
+  feederSerial();
+
   // 5) IN BANG TRANG THAI
   if (now - tPrint >= PRINT_INTERVAL_MS) {
     tPrint = now;
@@ -293,7 +311,122 @@ void docCamBien() {
   uint32_t tong = 0;
   for (int i = 0; i < 8; i++) tong += analogRead(DO_PIN);
   int adcDO = tong / 8;
+
+  // ================================================================
+  // BAT MAT CAM BIEN DO
+  // ----------------------------------------------------------------
+  // Truoc day dong duoi day chay thang, khong kiem tra gi:
+  //
+  //     giaTriDO = adcDO * DO_VALUE_MAX / DO_ADC_MAX;
+  //
+  // Nghia la giaTriDO KHONG BAO GIO la NAN. Cau  if (!isnan(giaTriDO))
+  // trong dieuKhienRelay() thanh cau chet, khong bao gio sai.
+  //
+  // Hau qua that: day bien tro rot ra (day jumper tren breadboard,
+  // chuyen thuong ngay ngoai ao) thi chan ADC tha noi va van tra ve
+  // mot con so TRONG RAT HOP LY. Neu no noi cao, che do AUTO tat guong
+  // oxy roi giu tat, server nhan mot so DO tu tin, bieu do van muot,
+  // khong co canh bao nao. Ao chet ma khong ai biet vi sao.
+  //
+  // Trong khi do docNhietDo() lam dung: bat -127, bat 85, bat NAN.
+  // Hai duong di lech chuan nhau.
+  //
+  // ----------------------------------------------------------------
+  // DOAN NAY BAT DUOC GI, VA KHONG BAT DUOC GI
+  //
+  // BAT DUOC : day tuot ma chan ADC ve 0 va nam yen o do.
+  // KHONG BAT DUOC: day tuot ma chan tha noi len MUC CAO. Luc do DO
+  //                 doc ra cao, AUTO tat guong - dung kieu hong nguy
+  //                 hiem nhat. Phan mem khong the phan biet duoc
+  //                 "3000 vi chu van bien tro" voi "3000 vi tha noi".
+  //
+  // Vi vay phan mem MOT MINH la chua du. Phai co dien tro that:
+  //
+  //   1) 100k tu GPIO35 xuong GND  ->  BAT BUOC.
+  //      Bien kieu hong nguy hiem (tha noi len cao) thanh kieu hong
+  //      bat duoc (ve 0). Khong co no thi doan code nay chi tom duoc
+  //      mot nua so truong hop.
+  //
+  //   2) Chan duoi bien tro xuong GND QUA dien tro 1k, thay vi noi
+  //      thang  ->  NEN CO.
+  //      Van het co xuong day thi ADC ~40 chu khong con bang 0. Nho
+  //      vay "ADC = 0" chi con mot nghia la MAT DAY, khong lan voi
+  //      "chu dang van het co de demo DO thap".
+  //
+  // GPIO35 thuoc nhom GPIO34-39: chi vao, KHONG CO dien tro keo noi
+  // bo. Nen khong dung INPUT_PULLDOWN thay the duoc, phai gan that.
+  //
+  // ----------------------------------------------------------------
+  // VI SAO MAC DINH TAT
+  //
+  // Hien GPIO35 khong noi cam bien DO that, chi noi mot BIEN TRO B10K
+  // de mo phong. Ma cach dung binh thuong cua bien tro do la: van het
+  // co xuong day cho DO ve 0, roi GIU NGUYEN o do de moi nguoi nhin
+  // guong oxy tu bat.
+  //
+  // Voi phan mem, "ADC nam yen o 0 rat lau" va "day tuot" la mot. Nen
+  // neu bat tinh nang nay len, thu de xay ra nhat khong phai su co that
+  // ma la chinh buoi demo: dang trinh bay thi so DO tren web doi thanh
+  // "chua ket noi cam bien".
+  //
+  // Rui ro that thi bang khong, vi khong co con tom nao trong biến trở.
+  //
+  // ----------------------------------------------------------------
+  // KHI NAO BAT LEN
+  //
+  // Khi gan cam bien DO THAT vao GPIO35. Luc do:
+  //   - Khong ai "van cam bien xuong 0" nua, nen het lan lon.
+  //   - Day tuot tro thanh su co that, va hau qua that.
+  //   - Nho gan luon dien tro 100k tu GPIO35 xuong GND (muc 1 o tren).
+  //
+  // Bat bang cach them dong nay vao config.h:
+  //     #define DO_BAT_MAT_DAY  1
+  // ================================================================
+#ifndef DO_BAT_MAT_DAY
+  #define DO_BAT_MAT_DAY   0       // 0 = tat (bien tro test), 1 = bat (cam bien that)
+#endif
+#ifndef DO_ADC_MAT_DAY
+  #define DO_ADC_MAT_DAY   2       // ADC <= muc nay coi la kha nghi
+#endif
+#ifndef DO_SO_LAN_XAC_NHAN
+  #define DO_SO_LAN_XAC_NHAN 240   // kha nghi lien tuc bay nhieu lan moi ket luan
+#endif                             // (250ms/lan -> 60 giay)
+
+#if !DO_BAT_MAT_DAY
+
+  // Bien tro test: doc thang, khong phan doan gi ca.
   giaTriDO = adcDO * DO_VALUE_MAX / DO_ADC_MAX;
+
+#else
+
+  static int demNghiNgo = 0;
+
+  if (adcDO <= DO_ADC_MAT_DAY) {
+    if (demNghiNgo < DO_SO_LAN_XAC_NHAN) demNghiNgo++;
+  } else {
+    if (!doOK) Serial.println(F("\nCAM BIEN DO: DA CO TIN HIEU LAI\n"));
+    demNghiNgo = 0;
+    doOK = true;
+  }
+
+  if (demNghiNgo >= DO_SO_LAN_XAC_NHAN) {
+    if (doOK) {
+      Serial.println();
+      Serial.println(F("!!! MAT CAM BIEN DO !!!"));
+      Serial.print  (F("ADC dinh o "));
+      Serial.print  (adcDO);
+      Serial.println(F(" suot 60 giay - nhieu kha nang tuot day bien tro."));
+      Serial.println(F(">>> BAT GUONG OXY de giu an toan, va gui null len server"));
+      Serial.println(F(">>> (khong gui so doan - so DO sai con nguy hiem hon khong co so)"));
+      Serial.println();
+    }
+    doOK = false;
+    giaTriDO = NAN;          // guiTelemetry() se gui null, web hien "chua ket noi"
+  } else {
+    giaTriDO = adcDO * DO_VALUE_MAX / DO_ADC_MAX;
+  }
+
+#endif  // DO_BAT_MAT_DAY
 
   // ---------- CAM BIEN pH (CHUA TICH HOP) ----------
 #if ENABLE_PH_SENSOR
@@ -388,10 +521,20 @@ bool coThayDoiDangKe() {
   if (cheDo != cheDoGuiLanCuoi) return true;
 
   // Lan dau tien (chua gui bao gio)
-  if (isnan(doGuiLanCuoi)) return true;
+  //
+  // Truoc day dong nay la  if (isnan(doGuiLanCuoi))  - dung khi DO khong
+  // bao gio NAN duoc. Gio DO co the NAN that (mat cam bien), neu con xet
+  // kieu cu thi mat cam bien = luon "co thay doi" = ban tin lien tuc
+  // khong nghi, suot thoi gian day con tuot.
+  if (!daGuiLanNao) return true;
+
+  // Vua mat cam bien DO, hoac vua co lai -> bao NGAY, dung doi nhip dinh ky.
+  // Day la tin quan trong nhat trong ca goi tin.
+  if (isnan(giaTriDO) != isnan(doGuiLanCuoi)) return true;
 
   // DO thay doi du nhieu (dang van bien tro)
-  if (!isnan(giaTriDO) && fabs(giaTriDO - doGuiLanCuoi) >= DO_CHANGE_TRIGGER) return true;
+  if (!isnan(giaTriDO) && !isnan(doGuiLanCuoi) &&
+      fabs(giaTriDO - doGuiLanCuoi) >= DO_CHANGE_TRIGGER) return true;
 
   // Nhiet do thay doi du nhieu
   if (!isnan(nhietDo) && !isnan(nhietDoGuiLanCuoi) &&
@@ -448,6 +591,17 @@ void dieuKhienRelay() {
       else if (giaTriDO >= DO_OFF) guongDangBat = false;   // DO du -> TAT
       // Khoang 5.0 - 5.5 : GIU NGUYEN trang thai cu
       // -> relay khong bat/tat lien tuc quanh nguong
+    } else {
+      // MAT CAM BIEN DO -> BAT GUONG.
+      //
+      // Khong duoc giu nguyen trang thai cu nhu ben nhiet do. Ly do:
+      // guong oxy dang TAT ma cam bien chet thi ao mat suc khi va
+      // khong con gi bat no len lai. Nhiet do thi khac - bom tat vai
+      // tieng khong giet tom, con thieu oxy thi co.
+      //
+      // Chay guong oan mot lat chi ton dien. Doan nham theo huong kia
+      // thi mat ca ao.
+      guongDangBat = true;
     }
 
     // ---------- MAY BOM theo nhiet do (hysteresis 32.0 / 31.5) ----------
@@ -543,7 +697,7 @@ void guiTelemetry() {
   http.addHeader("X-Device-Token", DEVICE_TOKEN);   // token nam o HEADER, khong nam tren URL
 
   // ---------- Tao JSON ----------
-  VAST_JSON_DOC(doc, 448);
+  VAST_JSON_DOC(doc, 640);   // phong to tu 448 cho vua 4 truong may cho an
   doc["device_id"] = DEVICE_ID;
   doc["pond_id"]   = POND_ID;
 
@@ -562,6 +716,15 @@ void guiTelemetry() {
 
   doc["rssi"] = WiFi.RSSI();
 
+  // ---------- MAY CHO AN TU DONG ----------
+  // Bao trang thai THAT cua motor len web, giong het cach bao bom/guong:
+  // web khong tu doan may dang chay, ma doi ESP32 noi.
+  doc["feeder_state"] = feedStateName();
+  doc["feeder_busy"]  = (feedState != FEED_IDLE);
+  doc["feeder_last_g"] = (int)feedDoneG;      // luong da xa o cu gan nhat
+  doc["feeder_meals"]  = feedTotalMeals;      // so cu tu luc bat may
+  doc["feeder_gps"]    = feedGramsPerSec;     // he so hieu chuan dang dung (g/giay)
+
   String body;
   serializeJson(doc, body);
 
@@ -573,6 +736,7 @@ void guiTelemetry() {
     soLanGuiOK++;
 
     // Ghi nho gia tri vua gui -> lan sau biet co gi thay doi khong
+    daGuiLanNao       = true;
     doGuiLanCuoi      = giaTriDO;
     nhietDoGuiLanCuoi = nhietDo;
     guongGuiLanCuoi   = guongDangBat;
@@ -672,10 +836,14 @@ void layLenhTuServer() {
       }
     }
 
+    // ---------------- MAY CHO AN TU DONG ----------------
+    // FEED_AMOUNT / FEED_NOW / FEED_STOP / FEED_CALIBRATE
+    // Xu ly nam trong feeder.h. Ham tra ve true nghia la lenh da duoc nhan.
+    else if (feederHandleCommand(cmd, val)) {
+      // da xu ly trong feeder.h, khong lam gi them o day
+    }
+
     // ---------------- CHUA HO TRO ----------------
-    // Cho giai doan may cho an tu dong sau nay:
-    //   FEED_NOW / FEED_AMOUNT / FEED_SCHEDULE
-    // Server da chap nhan san cac lenh nay, chi can them xu ly o day.
     else {
       Serial.println(F("    -> Lenh chua duoc ho tro o firmware nay"));
     }
@@ -734,8 +902,8 @@ void inTrangThai() {
 
   // ---- DO ----
   Serial.print(F("DO (B10K)     : "));
-  Serial.print(giaTriDO, 2);
-  Serial.println(F(" mg/L"));
+  if (isnan(giaTriDO)) Serial.println(F("MAT CAM BIEN - kiem tra day GPIO35"));
+  else { Serial.print(giaTriDO, 2); Serial.println(F(" mg/L")); }
 
   // ---- pH ----
   Serial.print(F("pH            : "));
@@ -743,13 +911,41 @@ void inTrangThai() {
   if (isnan(giaTriPH)) Serial.println(F("LOI CAM BIEN"));
   else Serial.println(giaTriPH, 2);
 #else
-  Serial.println(F("CHUA KET NOI CAM BIEN"));
+  // ================================================================
+  // CHUA BAT pH -> van IN DIEN AP DO DUOC o chan PH_PIN.
+  //
+  // De lam gi: hieu chuan pH can biet dien ap ung voi dung dich chuan
+  // pH 7.0 va pH 4.0. Neu khong in ra day thi phai bat ENABLE_PH_SENSOR
+  // len roi nap lai, ma luc do he thong da bat dau day so pH CHUA HIEU
+  // CHUAN len web - so sai ve pH con nguy hiem hon khong co so, vi pH
+  // dung de quyet dinh xu ly nuoc va phong benh.
+  //
+  // Nho vay: nap 1 lan, nhung 2 coc chuan, doc 2 con so o day,
+  // dien vao PH_CAL_* roi moi bat len.
+  // ================================================================
+  {
+    uint32_t tongPHthu = 0;
+    for (int i = 0; i < 16; i++) { tongPHthu += analogRead(PH_PIN); delay(2); }
+    float vPHthu = (tongPHthu / 16.0) * 3.3 / 4095.0;
+    Serial.print(F("CHUA BAT  (chan GPIO"));
+    Serial.print(PH_PIN);
+    Serial.print(F(" dang do "));
+    Serial.print(vPHthu, 3);
+    Serial.print(F(" V)"));
+    if (vPHthu > 3.15) Serial.print(F("  !! GAN NGUONG 3.3V - COI CHUNG CHAY CHAN"));
+    Serial.println();
+  }
 #endif
 
   Serial.println(F("----------------------------------------------"));
 
   // ---- Danh gia ----
-  if (giaTriDO < DO_ON) {
+  // isnan phai xet TRUOC: moi phep so sanh voi NAN deu tra ve false,
+  // nen neu khong xet thi mat cam bien lai roi vao nhanh cuoi va in
+  // "DO BINH THUONG" - dung luc dang khong biet DO bao nhieu.
+  if (isnan(giaTriDO)) {
+    Serial.println(F("CANH BAO: MAT CAM BIEN DO -> DANG BAT GUONG OXY de giu an toan"));
+  } else if (giaTriDO < DO_ON) {
     Serial.println(F("CANH BAO: DO THAP -> DANG BAT GUONG OXY"));
   } else if (giaTriDO < DO_OFF) {
     Serial.println(F("DO DANG HOI PHUC"));

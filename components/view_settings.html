@@ -5,6 +5,8 @@
     <div class="w-full">
         <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 w-full">
             <div class="space-y-4">
+
+                <!-- NÚT 1: Chỉnh sửa hồ sơ (Giữ nguyên) -->
                 <button @click="openProfileModal()"
                     class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all active:scale-95 text-slate-700 font-bold text-left">
                     <div class="flex items-center gap-3">
@@ -14,6 +16,22 @@
                     <i data-lucide="chevron-right" class="w-5 h-5 text-slate-400"></i>
                 </button>
 
+                <!-- NÚT 2 (MỚI): Cài đặt vân tay -->
+                <button @click="toggleFingerprint()"
+                    class="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all active:scale-95 text-slate-700 font-bold text-left">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="fingerprint" class="w-5 h-5 text-green-600"></i>
+                        <span>Đăng nhập bằng vân tay</span>
+                    </div>
+                    <!-- Nút gạt (Toggle Switch) -->
+                    <div class="w-11 h-6 rounded-full relative flex items-center transition-colors duration-300 shadow-inner"
+                        :class="isFingerprintEnabled ? 'bg-green-500' : 'bg-slate-300'">
+                        <div class="w-5 h-5 bg-white rounded-full absolute shadow transition-transform duration-300 ease-in-out"
+                            :class="isFingerprintEnabled ? 'translate-x-5' : 'translate-x-[2px]'"></div>
+                    </div>
+                </button>
+
+                <!-- NÚT 3: Đăng xuất (Giữ nguyên) -->
                 <button @click="showLogoutConfirmModal = true"
                     class="w-full flex items-center justify-between p-4 bg-red-50 hover:bg-red-100 rounded-2xl transition-all active:scale-95 text-red-600 font-bold text-left border border-red-100">
                     <div class="flex items-center gap-3">
@@ -21,6 +39,7 @@
                         <span>Đăng xuất tài khoản</span>
                     </div>
                 </button>
+
             </div>
         </div>
     </div>

@@ -22,6 +22,7 @@ const { URL } = require('url');
 
 const config = require('./config');
 const db = require('./db');
+const market = require('./market');
 const { handlers, matchDynamic, handleDynamic, send } = require('./api');
 
 const WEB_ROOT = path.resolve(__dirname, '..');   // thu muc chua index.html, dashboard.html...
@@ -144,7 +145,9 @@ const server = http.createServer(async (req, res) => {
                     body = await readJsonBody(req);
                     if (body.__error) return send(res, 400, { ok: false, error: body.__error });
                 }
-                return handlers[key](req, res, body);
+                // 'await' la bat buoc: co handler chay bat dong bo (vi du lay gia
+                // thi truong). Khong await thi loi cua no roi ra ngoai try/catch.
+                return await handlers[key](req, res, body);
             }
 
             const dyn = matchDynamic(req.method, pathname);
@@ -173,6 +176,23 @@ setInterval(() => {
     try {
         const cutoff = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
         db.purgeHistoryBefore(cutoff);
+
+        // Xoa phien dang nhap da het han + nhat ky qua 1 nam
+        db.sessionPurgeExpired();
+        db.logPurgeBefore(new Date(Date.now() - 365 * 24 * 3600 * 1000).toISOString());
+
+        // ------------------------------------------------------------------
+        // DON FILE WAL
+        //
+        // Database dang o che do WAL: moi thay doi ghi vao vast.db-wal truoc,
+        // thinh thoang moi don sang vast.db. Neu khong bao gio don, file WAL
+        // phinh mai. Da thay that: vast.db 311 KB nhung vast.db-wal 4,1 MB -
+        // gap 13 lan, va van dang to them.
+        //
+        // Dat SAU cac lenh xoa o tren, vi chinh cac lenh xoa do lam WAL to ra.
+        // ------------------------------------------------------------------
+        const wal = db.checkpointWal();
+        if (wal && wal.daDon) console.log('[DON DEP] Da gom file WAL ve database chinh.');
     } catch (e) {
         console.error('Loi don dep lich su:', e.message);
     }
@@ -183,6 +203,35 @@ process.on('unhandledRejection', e => console.error('unhandledRejection:', e));
 
 // ----------------------------------------------------------------
 server.listen(PORT, '0.0.0.0', () => {
+    // ============================================================
+    // TU DANG KY ESP32 THEO config.h
+    //
+    // config.h (ben ESP32) va bang iot_devices (ben may chu) phai khop
+    // nhau tung ky tu, nhung khong co gi buoc chung phai khop. Lech la
+    // ESP32 bi tu choi im lang, o chon "Thiet bi ESP32" tren web trong
+    // tron, va khong co dong nao noi vi sao. Da xay ra that.
+    //
+    // Nay may chu tu doc config.h va tu dang ky. Neu token lech thi BAO
+    // ra, khong tu sua - doan sai la ESP32 ngoai ao mat ket noi.
+    // ============================================================
+    try {
+        const r = require('./seed').tuDongDongBo();
+        if (r.hanhDong === 'da_dang_ky') {
+            console.log('[THIET BI] ' + r.chiTiet);
+        } else if (r.hanhDong === 'lech_token') {
+            console.warn('');
+            console.warn('[THIET BI] !! ' + r.chiTiet);
+            console.warn('[THIET BI]    ESP32 se bi tu choi. Chon 1 trong 2:');
+            console.warn('[THIET BI]      - Dung token cua config.h:');
+            console.warn('[THIET BI]          node seed.js --token <token trong config.h>');
+            console.warn('[THIET BI]      - Hoac chep token may chu vao config.h roi nap lai ESP32:');
+            console.warn('[THIET BI]          node seed.js --list');
+            console.warn('');
+        }
+    } catch (e) {
+        console.warn('[THIET BI] Khong tu dang ky duoc theo config.h:', e.message);
+    }
+
     const devices = db.listDevices();
     console.log('');
     console.log('==============================================================');
@@ -193,10 +242,13 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`   API health  : http://localhost:${PORT}/api/health`);
     console.log(`   Database    : ${db.backend}`);
     console.log(`   Bao Offline : sau ${config.deviceOfflineSeconds}s khong co telemetry`);
+    console.log(`   Gia thi truong: ${config.market.enabled === false ? 'TAT' : 'moi ' + config.market.refreshMinutes + ' phut (' + config.market.provider + ')'}`);
     console.log(`   Luu lich su : moi ${config.historySampleSeconds}s`);
     console.log('--------------------------------------------------------------');
     if (devices.length === 0) {
-        console.log('   !! CHUA CO THIET BI NAO. Hay chay:   node seed.js');
+        console.log('   !! CHUA CO THIET BI NAO.');
+        console.log('      Kiem tra esp32/esp32_vast/config.h co DEVICE_ID va');
+        console.log('      DEVICE_TOKEN chua, hoac chay:  node seed.js --list');
     } else {
         console.log('   Thiet bi da dang ky:');
         devices.forEach(d => console.log(`     - ${d.device_id}   (ao: ${d.pond_id})`));
@@ -206,4 +258,8 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('   vi du: http://192.168.1.10:' + PORT);
     console.log('==============================================================');
     console.log('');
+
+    // ---- BAT LICH TU DONG LAY GIA TOM ----
+    // Dat SAU listen de web len ngay, khong phai cho tai trang gia.
+    market.start();
 });

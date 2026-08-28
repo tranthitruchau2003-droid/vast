@@ -40,8 +40,7 @@
 
     <!-- ===== BANNER: KHONG KET NOI DUOC BACKEND ===== -->
     <template x-if="!iot.serverOk && iot.ready === false">
-        <div
-            class="mb-6 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-start gap-3 text-amber-800">
+        <div class="mb-6 bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-start gap-3 text-amber-800">
             <i data-lucide="server-off" class="w-5 h-5 shrink-0 mt-0.5"></i>
             <div class="text-sm">
                 <p class="font-black">CHƯA KẾT NỐI ĐƯỢC MÁY CHỦ IoT</p>
@@ -59,49 +58,115 @@
         <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">THAO TÁC NHANH</h3>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             <button @click="startVoiceInput()"
-                class="card p-4 flex flex-col items-center justify-center gap-3 hover:border-green-500 hover:shadow-md transition-all group active:scale-95 bg-green-50 border-green-200">
+                class="flex flex-col items-center justify-center p-4 bg-green-50 rounded-3xl border-2 border-green-200 shadow-sm hover:shadow-md transition-all active:scale-95 group">
+                <!-- Vòng tròn đậm, icon trắng -->
                 <div
-                    class="w-14 h-14 bg-green-600 text-white rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                    <i data-lucide="mic" class="w-7 h-7"></i>
+                    class="w-14 h-14 rounded-full bg-green-600 text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+                    <i data-lucide="mic" class="w-6 h-6"></i>
                 </div>
-                <span class="font-bold text-green-800 text-center text-sm md:text-base">Ghi Nhật
-                    Ký<br>(Giọng Nói)</span>
+                <span class="text-sm font-bold text-green-800 text-center leading-snug">Ghi Nhật Ký<br>(Giọng
+                    Nói)</span>
             </button>
 
+            <!-- 2. Quạt Nước (BẬT/TẮT HẾT) - Đổi màu động theo trạng thái -->
             <button @click="toggleAll('fan')"
-                class="card p-4 flex flex-col items-center justify-center gap-3 transition-all active:scale-95 border-2 bg-[#fefce8] border-yellow-200 hover:border-yellow-300 shadow-sm">
-                <div class="w-14 h-14 rounded-full flex items-center justify-center transition-colors bg-white shadow-sm border border-yellow-100"
-                    :class="isAllFansOn() ? 'text-green-600' : 'text-slate-400'">
-                    <i data-lucide="fan" class="w-7 h-7" :class="{'animate-spin': isAllFansOn()}"></i>
+                class="flex flex-col items-center justify-center p-4 rounded-3xl border-2 shadow-sm hover:shadow-md transition-all active:scale-95 group"
+                :class="isAllFansOn() ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'">
+
+                <!-- Màu nền tròn cũng tự động đổi (Vàng khi Bật, Xám khi Tắt) -->
+                <div class="w-14 h-14 rounded-full text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-all duration-300 shadow-sm"
+                    :class="isAllFansOn() ? 'bg-amber-500' : 'bg-slate-400'">
+
+                    <!-- VŨ KHÍ BÍ MẬT: Bọc thẻ span để Alpine.js điều khiển hiệu ứng xoay mượt mà -->
+                    <span class="flex items-center justify-center origin-center"
+                        :class="isAllFansOn() ? 'animate-spin' : ''">
+                        <i data-lucide="fan" class="w-6 h-6"></i>
+                    </span>
                 </div>
-                <span class="font-bold text-center text-sm md:text-base text-yellow-800">
-                    Quạt Nước<br>(<span x-text="isAllFansOn() ? 'BẬT' : 'TẮT'"></span> HẾT)
+
+                <span class="text-sm font-bold text-center leading-snug transition-colors"
+                    :class="isAllFansOn() ? 'text-amber-800' : 'text-slate-600'">
+                    Quạt Nước<br>
+                    <!-- Tự động đổi chữ Bật/Tắt theo trạng thái thật -->
+                    <span x-text="isAllFansOn() ? '(TẮT HẾT)' : '(BẬT HẾT)'"></span>
                 </span>
             </button>
 
-            <button @click="currentView = 'ai'"
-                class="card p-4 flex flex-col items-center justify-center gap-3 hover:border-blue-400 transition-all active:scale-95 bg-blue-50 border-blue-100">
-                <div class="w-14 h-14 bg-blue-500 text-white rounded-full flex items-center justify-center shadow-md">
-                    <i data-lucide="bot" class="w-7 h-7"></i>
+            <button @click="openFeedModal()"
+                class="flex flex-col items-center justify-center p-4 bg-blue-50 rounded-3xl border-2 border-blue-200 shadow-sm hover:shadow-md transition-all active:scale-95 group">
+                <div
+                    class="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+                    <i data-lucide="package-plus" class="w-6 h-6"></i>
                 </div>
-                <span class="font-bold text-blue-800 text-center text-sm md:text-base">Hỏi AI<br>Môi
-                    Trường</span>
+                <span class="text-sm font-bold text-blue-800 text-center leading-snug">Nạp Thức Ăn<br>Cho Từng Ao</span>
             </button>
 
             <button @click="showAddPondModal = true"
-                class="card p-4 flex flex-col items-center justify-center gap-3 hover:border-green-400 transition-all active:scale-95 border-dashed border-2 border-slate-300 bg-slate-50">
+                class="flex flex-col items-center justify-center p-4 bg-red-50 rounded-3xl border-2 border-red-200 shadow-sm hover:shadow-md transition-all active:scale-95 group">
                 <div
-                    class="w-14 h-14 bg-white text-green-600 rounded-full flex items-center justify-center shadow-sm border border-slate-200">
-                    <i data-lucide="plus" class="w-7 h-7"></i>
+                    class="w-14 h-14 rounded-full bg-red-500 text-white flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+                    <i data-lucide="plus" class="w-6 h-6 font-bold"></i>
                 </div>
-                <span class="font-bold text-slate-700 text-center text-sm md:text-base">Thêm Ao<br>Nuôi
-                    Tôm</span>
+                <span class="text-sm font-bold text-red-800 text-center leading-snug">Thêm Ao<br>Nuôi Tôm</span>
             </button>
         </div>
     </div>
 
     <!-- POND CARDS GRID -->
     <h3 class="text-lg font-bold text-slate-800 mb-4 px-2">TRẠNG THÁI CÁC AO</h3>
+
+    <!-- ============================================================
+         CHUA CO AO NAO
+         Truoc day "Ao so 1"/"Ao so 2" la hai dong go cung trong
+         dashboard.html nen ai mo cung thay. Gio danh sach doc tu
+         database, tai khoan moi se thay trong -> phai giai thich ro
+         va cho san loi di, khong de man hinh trang tron.
+         ============================================================ -->
+    <div x-show="store.ready && ponds.length === 0" x-cloak
+        class="card p-8 md:p-10 text-center mb-8">
+        <div class="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
+            <i data-lucide="waves" class="w-8 h-8"></i>
+        </div>
+        <h4 class="text-lg font-black text-slate-800 mb-2">Chưa có ao nuôi nào</h4>
+        <p class="text-sm text-slate-500 font-medium leading-relaxed max-w-md mx-auto">
+            Danh sách ao giờ được lưu trong database chứ không còn nằm cứng trong giao diện,
+            nên tài khoản mới sẽ bắt đầu từ trống.
+        </p>
+
+        <!-- Co ESP32 dang cho -> mot cu bam la xong -->
+        <template x-if="storeCoThietBiChoGan()">
+            <div class="mt-5">
+                <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-xl text-xs font-bold text-green-700 mb-4">
+                    <i data-lucide="cpu" class="w-4 h-4"></i>
+                    Tìm thấy <span x-text="devices.filter(d => d.gan_duoc && !d.pond_name).length"></span> thiết bị ESP32 chưa gắn ao
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                    <button @click="storeAdoptDevices()" :disabled="store.saving"
+                        class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all disabled:opacity-50">
+                        <span x-text="store.saving ? 'Đang tạo...' : 'Tạo ao từ thiết bị đang có'"></span>
+                    </button>
+                    <button @click="showAddPondModal = true; storeLoadDevices()"
+                        class="px-6 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-2xl active:scale-95 transition-all">
+                        Tự nhập thông tin ao
+                    </button>
+                </div>
+            </div>
+        </template>
+
+        <!-- Chua co ESP32 nao dang ky -->
+        <template x-if="!storeCoThietBiChoGan()">
+            <div class="mt-5">
+                <button @click="showAddPondModal = true; storeLoadDevices()"
+                    class="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all">
+                    Thêm ao nuôi
+                </button>
+                <p class="text-[11px] text-slate-400 font-medium mt-3">
+                    Chưa có thiết bị ESP32 nào đăng ký? Chạy <b>node seed.js</b> trong thư mục server.
+                </p>
+            </div>
+        </template>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         <template x-for="pond in ponds.slice().reverse()" :key="pond.id">
             <div class="card p-5 md:p-6 flex flex-col relative overflow-hidden transition-all duration-300"
@@ -133,8 +198,7 @@
                             <!-- BAO CHE DO CAP NHAT - de biet trinh duyet da nap code moi chua.
                                  REALTIME (xanh)  = server day du lieu xuong tuc thi
                                  Hoi lai (vang)   = dang chay kieu cu, hoi 2 giay/lan -->
-                            <span
-                                class="text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1 border"
+                            <span class="text-[10px] font-black px-2 py-1 rounded-full flex items-center gap-1 border"
                                 :class="iot.streamOk ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200'">
                                 <i :data-lucide="iot.streamOk ? 'zap' : 'refresh-cw'" class="w-3 h-3"></i>
                                 <span x-text="iot.streamOk ? 'REALTIME' : 'HỎI LẠI 2 GIÂY'"></span>

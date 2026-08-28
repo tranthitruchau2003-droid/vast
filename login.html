@@ -53,6 +53,8 @@
             }
         }
     </script>
+    <script src="js/vast-config.js?v=5"></script>
+    <style>[x-cloak]{display:none!important}</style>
 </head>
 
 <!-- Sửa min-h-screen thành h-screen để ngăn cuộn nếu không cần thiết, và đảm bảo căn giữa tuyệt đối -->
@@ -81,21 +83,60 @@
 
             <!-- FORM CARD (Khung trắng) -->
             <div class="bg-brand-surface p-6 sm:p-10 rounded-[24px] shadow-card w-full border border-white/50">
-                <form x-data="{ 
-                        phone: '', 
-                        password: '', 
+                <!-- ============================================================
+                     DANG NHAP THAT
+                     Ban truoc chi lam: go so dien thoai bat ky -> vao thang
+                     dashboard, KHONG kiem mat khau. Ai cam dien thoai cua ban
+                     cung mo duoc so sach.
+                     Gio goi /api/auth/login: mat khau duoc kiem tren may chu,
+                     sai 5 lan la bi khoa 15 phut.
+                     ============================================================ -->
+                <form x-data="{
+                        phone: '',
+                        password: '',
                         showPassword: false,
-                        handleLogin() {
-                            if (this.phone) {
-                                localStorage.setItem('currentUser', JSON.stringify({
-                                    name: 'Nông dân ' + this.phone.slice(-4),
-                                    role: 'Trại trưởng',
-                                    phone: this.phone
-                                }));
+                        dangGui: false,
+                        loi: '',
+
+                        async handleLogin() {
+                            this.loi = '';
+                            if (!this.phone || !this.password) {
+                                this.loi = 'Vui lòng nhập số điện thoại và mật khẩu';
+                                return;
+                            }
+
+                            this.dangGui = true;
+                            try {
+                                const API = (window.VAST_CONFIG?.API_BASE || '').replace(/\/$/, '');
+                                const r = await fetch(API + '/api/auth/login', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ phone: this.phone, password: this.password })
+                                });
+                                const d = await r.json();
+
+                                if (!r.ok || !d.ok) {
+                                    this.loi = d.error || 'Đăng nhập không được';
+                                    return;
+                                }
+
+                                // Chi luu MA PHIEN. Ho ten, so sach, ao... deu nam
+                                // tren may chu - dang nhap may nao cung thay.
+                                try { localStorage.setItem('vast_session_token', d.token); } catch (e) {}
                                 window.location.href = 'dashboard.html';
+
+                            } catch (e) {
+                                this.loi = 'Không kết nối được máy chủ. Kiểm tra server đã chạy chưa.';
+                            } finally {
+                                this.dangGui = false;
                             }
                         }
                     }" @submit.prevent="handleLogin()">
+
+                    <!-- Bao loi ngay tren form, khong dung alert() -->
+                    <div x-show="loi" x-cloak
+                        class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium"
+                        x-text="loi"></div>
 
                     <!-- Input Số điện thoại -->
                     <div class="mb-5">
@@ -127,14 +168,26 @@
                         </div>
                     </div>
 
-                    <!-- Quên mật khẩu -->
-                    <div class="flex justify-end mb-6">
-                        <a href="#" class="text-brand-primary font-bold text-sm hover:underline transition-all">Quên mật
-                            khẩu?</a>
+                    <!-- Cụm Đăng nhập Vân tay & Quên mật khẩu -->
+                    <div class="flex justify-between items-center mb-6">
+
+                        <!-- Nút Đăng nhập Vân tay -->
+                        <button type="button"
+                            class="flex items-center gap-2 text-slate-600 hover:text-brand-primary transition-colors focus:outline-none p-1.5 -ml-1.5 rounded-lg active:scale-95 hover:bg-brand-primary/10 cursor-pointer"
+                            @click="alert('Hệ thống đang mở cảm biến vân tay/FaceID...')">
+                            <!-- Icon vân tay của Lucide -->
+                            <i data-lucide="fingerprint" class="w-7 h-7 text-brand-primary"></i>
+                            <span class="text-sm font-bold"></span>
+                        </button>
+
+                        <!-- Quên mật khẩu -->
+                        <a href="#" class="text-brand-primary font-bold text-sm hover:underline transition-all">
+                            Quên mật khẩu?
+                        </a>
                     </div>
 
                     <!-- Nút Đăng Nhập -->
-                    <button type="submit"
+                    <button type="submit" :disabled="dangGui"
                         class="w-full py-3.5 sm:py-4 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-xl text-base sm:text-lg font-bold flex justify-center items-center shadow-btn transition-transform duration-300 active:scale-95 cursor-pointer">
                         Đăng nhập
                     </button>

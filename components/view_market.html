@@ -1,0 +1,323 @@
+<!-- ================= VIEW: THÔNG TIN THỊ TRƯỜNG ================= -->
+<div x-show="currentView === 'market' && !selectedPondId" x-transition:enter="transition ease-out duration-300"
+    x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0"
+    style="display: none;" class="pb-24 md:pb-8 w-full space-y-6">
+
+    <!-- 🔥 CỐ VẤN THU HOẠCH AI - dùng CHÊNH LỆCH GIÁ THẬT từ bảng giá thị trường -->
+    <div
+        class="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-3xl p-6 md:p-8 shadow-cardLg relative overflow-hidden">
+        <div class="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white opacity-10 rounded-full blur-2xl"></div>
+        <div class="absolute bottom-0 left-20 w-24 h-24 bg-blue-300 opacity-20 rounded-full blur-xl"></div>
+
+        <div class="relative z-10">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="p-2 bg-white/20 rounded-xl backdrop-blur-sm border border-white/30">
+                    <i data-lucide="bot" class="w-6 h-6 text-white"></i>
+                </div>
+                <h3 class="text-xl md:text-2xl font-black text-white tracking-tight">Cố vấn Thu hoạch AI</h3>
+                <span
+                    class="bg-gradient-to-r from-amber-400 to-yellow-500 text-yellow-900 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-wider ml-auto md:ml-2">Đề
+                    xuất</span>
+            </div>
+
+            <!-- Có đủ dữ liệu giá -> nói bằng SỐ THẬT -->
+            <template x-if="marketGap(50)">
+                <div>
+                    <p class="text-blue-50 text-sm md:text-base font-medium mb-5 leading-relaxed">
+                        <b class="text-white">Ao số 1</b> đang ở size <b class="text-white">50 con/kg</b>.
+                        Giá thị trường hôm nay:
+                        <b class="text-white" x-text="marketPrice(marketGap(50).from.price) + ' đ/kg'"></b>
+                        cho size 50, và
+                        <b class="text-white"
+                            x-text="marketPrice(marketGap(50).to.price) + ' đ/kg'"></b>
+                        cho <span x-text="marketGap(50).to.size_label.toLowerCase()"></span> —
+                        chênh lệch
+                        <b class="text-amber-300"
+                            x-text="marketPrice(marketGap(50).diff) + ' đ/kg'"></b>.
+                    </p>
+
+                    <div
+                        class="bg-white/10 p-5 rounded-2xl border border-white/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mt-4">
+                        <div class="w-full md:w-auto">
+                            <p class="text-sm text-blue-100 font-medium mb-2">Dự kiến nuôi thêm 12 ngày:</p>
+                            <div class="flex flex-col sm:flex-row sm:gap-6 gap-2">
+                                <p
+                                    class="text-sm flex justify-between sm:block w-full sm:w-auto border-b border-white/10 pb-1 sm:border-0 sm:pb-0">
+                                    <span class="text-blue-200">Chi phí cám:</span> <b class="text-white">~15 Triệu</b>
+                                </p>
+                                <p class="text-sm flex justify-between sm:block w-full sm:w-auto">
+                                    <span class="text-blue-200">Doanh thu tăng:</span>
+                                    <b class="text-green-300" x-text="'~' + marketPrice(marketGap(50).diff * 1000) + ' đ'"></b>
+                                    <span class="text-[10px] text-blue-200 block sm:inline">(ước cho 1 tấn tôm)</span>
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            class="w-full md:w-auto px-6 py-3 mt-2 md:mt-0 bg-white text-indigo-700 font-black rounded-xl hover:bg-blue-50 transition-colors active:scale-95 shadow-lg whitespace-nowrap">
+                            Giữ lại nuôi tiếp
+                        </button>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Chưa đủ dữ liệu giá -> NÓI THẲNG, không bịa con số -->
+            <template x-if="!marketGap(50)">
+                <p class="text-blue-50 text-sm md:text-base font-medium leading-relaxed">
+                    Chưa đủ dữ liệu giá thị trường để so sánh chênh lệch giữa các size.
+                    Bấm <b class="text-white">Làm mới</b> ở bảng giá bên dưới để lấy giá mới nhất.
+                </p>
+            </template>
+        </div>
+    </div>
+
+    <!-- GRID 4 NHÓM THÔNG TIN THỊ TRƯỜNG -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- ============================================================ -->
+        <!-- 1. BẢNG GIÁ TÔM THƯƠNG PHẨM  (dữ liệu THẬT từ /api/market)   -->
+        <!-- ============================================================ -->
+        <div class="card p-6 flex flex-col h-full">
+
+            <!-- Tiêu đề + trạng thái cập nhật + nút làm mới -->
+            <div class="flex justify-between items-start mb-4 border-b border-slate-100 pb-4 gap-3">
+                <div class="min-w-0">
+                    <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <i data-lucide="dollar-sign" class="w-5 h-5 text-green-600 shrink-0"></i> Giá Tôm Thương Phẩm
+                    </h3>
+                    <div class="flex items-center gap-2 mt-2 flex-wrap">
+                        <span class="text-[11px] font-bold px-2 py-1 rounded-lg whitespace-nowrap"
+                            :class="marketStatusClass()" x-text="marketUpdatedText()"></span>
+                        <span class="text-[11px] text-slate-400 font-semibold" x-show="market.region"
+                            x-text="market.region"></span>
+                        <span class="text-[11px] text-slate-400 font-semibold">·</span>
+                        <a href="https://tepbac.com/gia-thuy-san/gia/tom" target="_blank"
+                            class="text-[11px] text-slate-400 font-semibold hover:text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                            x-text="'Nguồn: ' + marketSourceText()"></a>
+                    </div>
+                </div>
+
+                <button @click="marketRefresh()" :disabled="market.loading"
+                    class="shrink-0 flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 active:scale-95 transition disabled:opacity-50">
+                    <i data-lucide="refresh-cw" class="w-4 h-4" :class="market.loading && 'animate-spin'"></i>
+                    <span x-text="market.loading ? 'Đang lấy...' : 'Làm mới'"></span>
+                </button>
+            </div>
+
+            <!-- Cảnh báo khi số liệu cũ / chưa lấy được: KHÔNG im lặng hiện giá sai -->
+            <div x-show="market.ready && (market.stale || market.error)" x-cloak
+                class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+                <div class="text-xs text-amber-800 font-medium leading-relaxed">
+                    <span x-show="market.allFallback">Chưa lấy được giá thị trường — số dưới đây chỉ là
+                        <b>giá tham khảo</b>, đừng dùng để chốt bán.</span>
+                    <span x-show="market.usingFallback && !market.allFallback">Có
+                        <b x-text="market.counts.fallback"></b> dòng chưa lấy được giá thật (ghi
+                        <i>Số tham khảo</i>) — các dòng còn lại là giá thật.</span>
+                    <span x-show="!market.usingFallback && market.stale">Giá tự động đã cũ, máy chủ chưa lấy được bản
+                        mới.</span>
+                    <span x-show="market.error" x-text="' ' + market.error"></span>
+                    <div class="text-[11px] text-amber-700/80 mt-1 font-normal" x-show="market.lastError"
+                        x-text="market.lastError"></div>
+                </div>
+            </div>
+
+            <!-- ============================================================
+                 BẢNG GIÁ CÓ CHỖ NGƯỢC QUY LUẬT
+                 Tôm càng to (số con/kg càng nhỏ) thì giá càng cao. Ngược lại
+                 là dấu hiệu hoặc trang nguồn công bố như vậy thật, hoặc bộ đọc
+                 lấy nhầm cột. Phải báo ra — người nuôi bán tôm thật bằng số này.
+                 ============================================================ -->
+            <div x-show="market.nghiNgo" x-cloak
+                class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-xl flex items-start gap-2.5">
+                <i data-lucide="git-compare-arrows" class="w-4 h-4 text-orange-600 shrink-0 mt-0.5"></i>
+                <div class="min-w-0">
+                    <p class="text-xs text-orange-800 font-bold leading-relaxed"
+                        x-text="market.nghiNgo?.ket_luan"></p>
+                    <ul class="mt-1 space-y-0.5">
+                        <template x-for="(c, i) in (market.nghiNgo?.chi_tiet || [])" :key="i">
+                            <li class="text-[11px] text-orange-700 font-medium" x-text="'• ' + c.noi_dung"></li>
+                        </template>
+                    </ul>
+                    <a href="https://tepbac.com/gia-thuy-san/gia/tom" target="_blank"
+                        class="inline-flex items-center gap-1 text-[11px] font-bold text-orange-800 hover:underline mt-1.5">
+                        Mở trang nguồn để đối chiếu
+                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Tabs giống tôm — hiện đúng những loại có dữ liệu -->
+            <div class="flex bg-slate-100 p-1 rounded-xl mb-4">
+                <template x-for="t in marketLoaiTom()" :key="t.ma">
+                    <button @click="marketSetSpecies(t.ma)"
+                        class="flex-1 py-1.5 text-sm rounded-lg transition"
+                        :class="market.species === t.ma ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium hover:text-slate-800'"
+                        x-text="t.ten"></button>
+                </template>
+            </div>
+
+            <!-- Đang tải lần đầu -->
+            <div x-show="!market.ready" class="space-y-3 flex-1">
+                <template x-for="n in 3" :key="n">
+                    <div class="h-[62px] bg-slate-100 rounded-xl animate-pulse"></div>
+                </template>
+            </div>
+
+            <!-- Bảng giá theo size -->
+            <div x-show="market.ready" x-cloak class="space-y-3 flex-1">
+
+                <div x-show="marketRows().length === 0"
+                    class="p-6 text-center text-sm text-slate-500 font-medium bg-slate-50 rounded-xl border border-slate-100">
+                    Chưa có giá cho loại tôm này.
+                </div>
+
+                <template x-for="item in marketRows()" :key="item.code">
+                    <button @click="marketSelect(item.code)"
+                        class="w-full text-left flex justify-between items-center p-3.5 border rounded-xl transition active:scale-[0.99]"
+                        :class="market.selectedCode === item.code
+                                ? 'bg-green-50 border-green-300'
+                                : 'bg-slate-50 border-slate-100 hover:border-slate-300'">
+                        <div class="min-w-0">
+                            <span class="font-bold text-slate-700 block" x-text="item.size_label"></span>
+                            <template x-if="marketBadge(item)">
+                                <span class="text-[10px] font-bold uppercase tracking-wide"
+                                    :class="marketBadge(item).cls" x-text="marketBadge(item).text"></span>
+                            </template>
+                            <span class="text-[10px] text-slate-400 font-medium block" x-show="item.manual_note"
+                                x-text="item.manual_note"></span>
+                        </div>
+                        <div class="text-right shrink-0 ml-3">
+                            <span class="font-black text-lg text-slate-800 tracking-tight"
+                                x-text="marketPrice(item.price) + ' đ'"></span>
+
+                            <!-- Mức thay đổi hiện bằng PHẦN TRĂM (số trang nguồn công bố) -->
+                            <span class="text-xs font-bold flex items-center justify-end mt-0.5"
+                                :class="marketDeltaClass(item)">
+                                <i :data-lucide="marketDeltaIcon(item)" class="w-3 h-3 mr-1"></i>
+                                <span x-text="marketDelta(item) || 'Không đổi'"></span>
+                                <span class="text-[10px] font-semibold opacity-70 ml-1"
+                                    x-show="marketDeltaTien(item)"
+                                    x-text="'(' + marketDeltaTien(item) + ')'"></span>
+                            </span>
+
+                            <!-- Con số % này là SO VỚI BAO LÂU TRƯỚC -->
+                            <!-- Trang nguồn ghi "▲ 9.1% (3 tháng)" — là so với 3 THÁNG -->
+                            <!-- trước, không phải so với hôm qua. Không ghi rõ thì người -->
+                            <!-- nuôi tưởng giá đang biến động trong ngày.                -->
+                            <span class="text-[10px] text-slate-400 font-medium block"
+                                x-show="marketKyHan(item)" x-text="marketKyHan(item)"></span>
+
+                            <!-- Trang nguồn cập nhật dòng này lúc nào -->
+                            <span class="text-[10px] font-semibold block mt-0.5"
+                                :class="marketCapNhatClass(item)" x-show="marketCapNhat(item)">
+                                <span x-text="marketCapNhat(item)"></span>
+                                <span x-show="item.source_stale"> · số cũ</span>
+                            </span>
+                        </div>
+                    </button>
+                </template>
+            </div>
+
+            <!-- Biểu đồ xu hướng giá -->
+            <div x-show="market.ready && marketRows().length > 0" x-cloak class="mt-5 pt-4 border-t border-slate-100">
+                <div class="flex items-center justify-between mb-3">
+                    <p class="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                        <i data-lucide="line-chart" class="w-4 h-4 text-slate-400"></i>
+                        Xu hướng giá <span x-text="marketChartLabel()"></span>
+                    </p>
+                    <div class="flex bg-slate-100 p-0.5 rounded-lg">
+                        <template x-for="d in [7, 30, 90]" :key="d">
+                            <button @click="market.chartDays = d; marketLoadChart()"
+                                class="px-2.5 py-1 text-[11px] rounded-md transition"
+                                :class="market.chartDays === d ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium'"
+                                x-text="d + ' ngày'"></button>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="h-[150px] relative">
+                    <canvas id="marketChart"></canvas>
+                </div>
+
+                <p class="text-[11px] text-slate-400 font-medium mt-2 text-center" x-show="marketChartPointCount() < 2">
+                    Biểu đồ cần ít nhất 2 ngày dữ liệu. Cứ để hệ thống chạy, mỗi ngày sẽ tự thêm 1 điểm.
+                </p>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- Thẻ "Giá Vật Tư Đầu Vào" ĐÃ BỎ theo yêu cầu người dùng.      -->
+        <!--                                                            -->
+        <!-- Lý do bỏ: nguồn giá vật tư của Tép Bạc nằm ở trang riêng    -->
+        <!-- không có trong menu, cấu trúc ô khác trang giá tôm, và bộ   -->
+        <!-- đọc liên tục lấy sai (mã dính vào tên, % là của 3 tháng bị  -->
+        <!-- hiểu thành trong ngày). Số liệu sai về chi phí đầu vào thì  -->
+        <!-- hại hơn là không có. Giá tôm không liên quan, vẫn chạy.     -->
+        <!--                                                            -->
+        <!-- Phần server (bảng market_supplies, API /api/market/supplies)-->
+        <!-- vẫn còn nguyên, chỉ TẮT lấy tự động trong config.js.        -->
+        <!-- Muốn bật lại: đặt market.suppliesEnabled = true và khôi     -->
+        <!-- phục khối HTML này từ git.                                  -->
+        <!-- ============================================================ -->
+
+        <!-- 3. CẢNH BÁO DỊCH TỄ VÀ THỜI TIẾT -->
+        <div class="card p-6 flex flex-col h-full">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 pb-4">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                    <i data-lucide="map" class="w-5 h-5 text-red-500"></i> Cảnh Báo Vùng Nuôi
+                </h3>
+            </div>
+            <div class="space-y-3 flex-1">
+                <div class="p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3">
+                    <i data-lucide="shield-alert" class="w-6 h-6 text-red-500 shrink-0 mt-0.5"></i>
+                    <div>
+                        <div class="text-sm font-black text-red-800 mb-1">Cảnh báo Đốm Trắng</div>
+                        <p class="text-sm text-red-700 font-medium leading-relaxed">Phát hiện dịch đốm trắng lây lan tại
+                            3 trại cách bạn 5km. Khuyến cáo kiểm tra lưới chắn chim và không cấp nước trực tiếp.</p>
+                    </div>
+                </div>
+                <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+                    <i data-lucide="cloud-rain-wind" class="w-6 h-6 text-amber-600 shrink-0 mt-0.5"></i>
+                    <div>
+                        <div class="text-sm font-black text-amber-800 mb-1">Mưa lớn kéo dài</div>
+                        <p class="text-sm text-amber-700 font-medium leading-relaxed">Dự báo đêm nay có mưa lớn. Chuẩn
+                            bị vôi nông nghiệp để tạt quanh bờ ao tránh tụt pH đột ngột.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. KẾT NỐI GIAO THƯƠNG (B2B) -->
+        <div class="card p-6 flex flex-col h-full">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 pb-4">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                    <i data-lucide="handshake" class="w-5 h-5 text-purple-600"></i> Sàn Giao Thương
+                </h3>
+                <span class="text-xs bg-purple-100 text-purple-800 font-bold px-2 py-1 rounded-lg">Cần mua</span>
+            </div>
+            <div class="space-y-4 flex-1">
+                <div
+                    class="p-4 border-2 border-slate-100 rounded-2xl hover:border-purple-300 transition-colors cursor-pointer group">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-bold text-slate-800 group-hover:text-purple-700">Thu mua tôm thẻ Size 30-40</h4>
+                        <span class="text-[10px] font-bold text-slate-400">10 phút trước</span>
+                    </div>
+                    <p class="text-sm text-slate-600 font-medium mb-3">Nhà máy Thủy sản X Cần thu mua gấp 10 tấn tại Cà
+                        Mau/Bạc Liêu. Giá thu mua tốt nhất hôm nay.</p>
+                    <button class="text-sm font-bold text-purple-600 flex items-center gap-1 group-hover:underline">Liên
+                        hệ thương lái <i data-lucide="arrow-right" class="w-4 h-4"></i></button>
+                </div>
+                <div
+                    class="p-4 border-2 border-slate-100 rounded-2xl hover:border-purple-300 transition-colors cursor-pointer group">
+                    <div class="flex justify-between items-start mb-2">
+                        <h4 class="font-bold text-slate-800 group-hover:text-purple-700">Xuất khẩu EU phục hồi</h4>
+                        <span class="text-[10px] font-bold text-slate-400">2 giờ trước</span>
+                    </div>
+                    <p class="text-sm text-slate-600 font-medium">Nhu cầu nhập khẩu từ thị trường Châu Âu đang tăng mạnh
+                        chuẩn bị cho dịp cuối năm. Giá tôm cỡ lớn dự báo tiếp tục tăng.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

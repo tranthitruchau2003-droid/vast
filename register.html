@@ -53,6 +53,8 @@
             }
         }
     </script>
+    <script src="js/vast-config.js?v=5"></script>
+    <style>[x-cloak]{display:none!important}</style>
 </head>
 
 <!-- Sửa min-h-screen thành h-screen để ngăn cuộn nếu không cần thiết, và đảm bảo căn giữa tuyệt đối -->
@@ -82,23 +84,60 @@
             <!-- FORM CARD (Khung trắng) -->
             <div class="bg-brand-surface p-6 sm:p-10 rounded-[24px] shadow-card w-full border border-white/50">
                 <form x-data="{ 
-                        fullName: '', 
-                        phone: '', 
+                        fullName: '',
+                        phone: '',
                         password: '',
                         showPassword: false,
-                        
-                        // Hàm giả lập đăng ký thành công và lưu tên vào localStorage
-                        registerUser() {
-                            if(this.fullName && this.phone && this.password) {
-                                localStorage.setItem('currentUser', JSON.stringify({
-                                    name: this.fullName,
-                                    role: 'Trại trưởng',
-                                    phone: this.phone
-                                }));
+                        dangGui: false,
+                        loi: '',
+
+                        // Tao tai khoan THAT tren may chu.
+                        // Mat khau duoc bam PBKDF2 truoc khi luu - may chu
+                        // khong bao gio giu mat khau goc cua ban.
+                        async registerUser() {
+                            this.loi = '';
+                            if (!this.fullName || !this.phone || !this.password) {
+                                this.loi = 'Vui lòng điền đủ họ tên, số điện thoại và mật khẩu';
+                                return;
+                            }
+                            if (this.password.length < 6) {
+                                this.loi = 'Mật khẩu phải từ 6 ký tự trở lên';
+                                return;
+                            }
+
+                            this.dangGui = true;
+                            try {
+                                const API = (window.VAST_CONFIG?.API_BASE || '').replace(/\/$/, '');
+                                const r = await fetch(API + '/api/auth/register', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        name: this.fullName,
+                                        phone: this.phone,
+                                        password: this.password
+                                    })
+                                });
+                                const d = await r.json();
+
+                                if (!r.ok || !d.ok) {
+                                    this.loi = d.error || 'Đăng ký không được';
+                                    return;
+                                }
+
+                                try { localStorage.setItem('vast_session_token', d.token); } catch (e) {}
                                 window.location.href = 'dashboard.html';
+
+                            } catch (e) {
+                                this.loi = 'Không kết nối được máy chủ. Kiểm tra server đã chạy chưa.';
+                            } finally {
+                                this.dangGui = false;
                             }
                         }
                     }" @submit.prevent="registerUser()">
+
+                    <div x-show="loi" x-cloak
+                        class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium"
+                        x-text="loi"></div>
 
                     <!-- Input Họ và Tên -->
                     <div class="mb-5">
@@ -142,7 +181,7 @@
                     </div>
 
                     <!-- Submit Button -->
-                    <button type="submit"
+                    <button type="submit" :disabled="dangGui"
                         class="w-full py-3.5 sm:py-4 bg-brand-primary hover:bg-brand-primaryHover text-white rounded-xl text-base sm:text-lg font-bold flex justify-center items-center shadow-btn transition-transform duration-300 active:scale-95 cursor-pointer">
                         Đăng Ký Tài Khoản
                     </button>

@@ -159,6 +159,25 @@
 #define DO_ADC_MAX      4095.0
 #define DO_VALUE_MAX    12.0
 
+/* Bat mat cam bien DO (day tuot -> ADC nam yen o 0).
+   Khi bat: gui null len server thay vi so doan, va BAT guong oxy cho an toan.
+
+   MAC DINH TAT (0), va nen de nguyen chung nao GPIO35 con noi bien tro B10K.
+   Ly do: cach demo binh thuong la van het co xuong day roi giu do cho moi
+   nguoi xem guong tu bat. Voi phan mem, "ADC nam yen o 0 rat lau" khong khac
+   gi "day tuot" - nen bat len thi thu de xay ra nhat lai la bao nham giua
+   buoi demo, trong khi rui ro that bang khong vi khong co con tom nao.
+
+   BAT LEN (1) khi gan cam bien DO THAT. Nho gan kem dien tro 100k tu GPIO35
+   xuong GND: GPIO34-39 khong co dien tro keo noi bo, thieu no thi day tuot
+   co the tha noi len MUC CAO -> DO doc ra cao -> AUTO tat guong, dung kieu
+   hong nguy hiem nhat va phan mem khong the phan biet duoc. */
+#define DO_BAT_MAT_DAY  0
+
+/* Chi co tac dung khi DO_BAT_MAT_DAY = 1 */
+#define DO_ADC_MAT_DAY     2     /* ADC <= muc nay la kha nghi           */
+#define DO_SO_LAN_XAC_NHAN 240   /* kha nghi lien tuc 240 lan x 250ms = 60 giay */
+
 /* Hieu chinh pH (chi dung khi ENABLE_PH_SENSOR = 1).
    Cach do: nhung dau do vao dung dich chuan, xem dien ap in tren Serial,
    roi dien vao 2 cap gia tri duoi day. */

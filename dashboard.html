@@ -24,6 +24,10 @@
          trong bo nho dem. Moi lan sua js/iot.js hay doi so nay len 1 don vi. -->
     <script src="js/vast-config.js?v=5"></script>
     <script src="js/iot.js?v=5"></script>
+    <script src="js/market.js?v=1"></script>
+    <script src="js/feed.js?v=1"></script>
+    <script src="js/store.js?v=3"></script>
+    <script src="js/ai.js?v=1"></script>
 
     <script>
         tailwind.config = {
@@ -86,6 +90,8 @@
             z-index: -1;
         }
 
+        [x-cloak] { display: none !important; }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -108,6 +114,7 @@
             <div hx-get="components/view_ai.html" hx-trigger="load" hx-swap="outerHTML"></div>
             <div hx-get="components/view_finance.html" hx-trigger="load" hx-swap="outerHTML"></div>
             <div hx-get="components/view_settings.html" hx-trigger="load" hx-swap="outerHTML"></div>
+            <div hx-get="components/view_market.html" hx-trigger="load" hx-swap="outerHTML"></div>
 
             <!-- ================= VIEW: CHI TIẾT AO (POND DETAIL) ================= -->
             <div x-show="selectedPondId" x-transition.opacity.duration.300ms style="display: none;">
@@ -126,7 +133,7 @@
 
                         <div class="flex items-center gap-2">
                             <!-- Nút Trích xuất QR -->
-                            <button @click="showQRModal = true"
+                            <button @click="openQR()"
                                 class="px-3 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-blue-100 transition-colors shadow-sm">
                                 <i data-lucide="qr-code" class="w-4 h-4"></i>
                                 <span class="hidden sm:inline">Xuất QR</span>
@@ -179,8 +186,8 @@
                     </div>
                 </div>
 
-                <!-- LƯỚI THÔNG TIN: CẢNH BÁO + NHẬT KÝ + THU HOẠCH -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- LƯỚI THÔNG TIN: CẢNH BÁO + MÁY CHO ĂN + NHẬT KÝ + THU HOẠCH -->
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
                     <!-- 2. CẢNH BÁO HỆ THỐNG GẦN ĐÂY -->
                     <div class="card p-5 md:p-6 flex flex-col">
@@ -210,7 +217,148 @@
                         </div>
                     </div>
 
-                    <!-- 3. NHẬT KÝ HOẠT ĐỘNG (ĐỒNG BỘ VỚI AI) -->
+                    <!-- 3. TRẠNG THÁI MÁY CHO ĂN (THÊM MỚI THEO YÊU CẦU) -->
+                    <div class="card p-5 md:p-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                <i data-lucide="cpu" class="w-5 h-5 text-amber-500"></i> Máy cho ăn
+                            </h3>
+                            <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Tự động
+                                AI</span>
+                        </div>
+
+                        <div class="flex-1 flex flex-col space-y-4 justify-between">
+
+                            <!-- CHƯA KHAI BÁO THÔNG SỐ -> nói rõ thiếu gì, không hiện số bịa -->
+                            <template x-if="!feedHasPlan()">
+                                <div class="flex-1 flex flex-col items-center justify-center text-center py-6">
+                                    <i data-lucide="clipboard-list" class="w-10 h-10 text-slate-300 mb-3"></i>
+                                    <p class="text-sm text-slate-500 font-medium leading-relaxed px-2"
+                                        x-text="feedMissingText()"></p>
+                                    <button @click="feedOpenSetup()"
+                                        class="mt-4 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-200 active:scale-95 transition">
+                                        Khai báo thông số ao
+                                    </button>
+                                </div>
+                            </template>
+
+                            <template x-if="feedHasPlan()">
+                                <div class="flex-1 flex flex-col space-y-4 justify-between">
+
+                                    <!-- Thanh tiến trình lượng cám -->
+                                    <div>
+                                        <div
+                                            class="flex justify-between items-center text-sm font-bold text-slate-700 mb-1.5">
+                                            <span>Lượng cám tồn kho</span>
+                                            <span :class="feedStockTextClass()"
+                                                x-text="feedStockPct() !== null ? feedStockPct() + '%' : '--'"></span>
+                                        </div>
+                                        <div
+                                            class="w-full bg-slate-100 h-3 rounded-full overflow-hidden border border-slate-200 mb-1.5 shadow-inner">
+                                            <div class="h-full rounded-full transition-all duration-500"
+                                                :class="feedStockBarClass()"
+                                                :style="'width: ' + (feedStockPct() ?? 0) + '%'"></div>
+                                        </div>
+                                        <div class="flex justify-between items-center">
+                                            <span class="text-[11px] font-semibold" :class="feedDaysLeftClass()"
+                                                x-text="feedDaysLeftText()"></span>
+                                            <p class="text-xs text-slate-500 font-medium">Còn <span
+                                                    class="font-bold text-slate-700" x-text="feedStockText()"></span></p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Cảnh báo điều chỉnh theo oxy / nhiệt độ thật -->
+                                    <template x-if="feedAdjustNote()">
+                                        <div class="p-3 rounded-xl border flex items-start gap-2.5"
+                                            :class="{
+                                                'bg-red-50 border-red-200': feedAdjustNote().level === 'danger',
+                                                'bg-amber-50 border-amber-200': feedAdjustNote().level === 'warning',
+                                                'bg-slate-50 border-slate-200': feedAdjustNote().level === 'info'
+                                            }">
+                                            <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 mt-0.5"
+                                                :class="{
+                                                    'text-red-500': feedAdjustNote().level === 'danger',
+                                                    'text-amber-600': feedAdjustNote().level === 'warning',
+                                                    'text-slate-400': feedAdjustNote().level === 'info'
+                                                }"></i>
+                                            <p class="text-xs font-medium leading-relaxed"
+                                                :class="{
+                                                    'text-red-800': feedAdjustNote().level === 'danger',
+                                                    'text-amber-800': feedAdjustNote().level === 'warning',
+                                                    'text-slate-600': feedAdjustNote().level === 'info'
+                                                }"
+                                                x-text="feedAdjustNote().text"></p>
+                                        </div>
+                                    </template>
+
+                                    <div class="space-y-3">
+                                        <!-- Đồng hồ đếm ngược -->
+                                        <div
+                                            class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center gap-3">
+                                            <div
+                                                class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-sm">
+                                                <i data-lucide="timer" class="w-5 h-5"></i>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                                                    Cữ ăn tiếp theo sau</p>
+                                                <p class="text-base font-black text-slate-800 mt-0.5">
+                                                    <span x-text="feedNextMealText()"></span>
+                                                    <span class="text-xs font-semibold text-slate-400 ml-1"
+                                                        x-text="feedNextMealAt()"></span>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Dự kiến lượng xả -->
+                                        <div
+                                            class="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 flex items-center gap-3">
+                                            <div
+                                                class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0 shadow-sm">
+                                                <i data-lucide="scale" class="w-5 h-5"></i>
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                                                    Lượng xả cữ tới</p>
+                                                <p class="text-base font-black text-slate-800 mt-0.5">
+                                                    <span x-text="feedNum(feedPerMealKg())"></span>
+                                                    <span class="text-sm font-semibold text-slate-500">kg</span>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <!-- Con số này ở đâu ra: hiện phép tính để người nuôi kiểm được -->
+                                        <div class="px-1">
+                                            <p class="text-[11px] text-slate-400 font-medium leading-relaxed"
+                                                x-text="feedExplain()"></p>
+                                            <p class="text-[11px] text-slate-400 font-medium mt-1"
+                                                x-text="feedTodayText()"></p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Nút thao tác -->
+                                    <div class="flex gap-2 pt-1">
+                                        <button @click="feedRunNow()" :disabled="feed.busy"
+                                            class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-200 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-1.5">
+                                            <i data-lucide="play" class="w-4 h-4"></i>
+                                            <span x-text="feed.busy ? 'Đang gửi...' : 'Xả cữ ngay'"></span>
+                                        </button>
+                                        <button @click="feedOpenSetup()"
+                                            class="px-3 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-bold rounded-xl active:scale-95 transition flex items-center gap-1.5">
+                                            <i data-lucide="ruler" class="w-4 h-4"></i>
+                                            Chài mẫu
+                                        </button>
+                                        <button @click="feedOpenTest()" title="Kiểm tra máy cho ăn"
+                                            class="px-3 py-2.5 border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-bold rounded-xl active:scale-95 transition flex items-center gap-1.5">
+                                            <i data-lucide="wrench" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 4. NHẬT KÝ HOẠT ĐỘNG -->
                     <div class="card p-5 md:p-6 flex flex-col">
                         <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                             <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -220,7 +368,6 @@
                                 AI</span>
                         </div>
                         <div class="space-y-3 flex-1 overflow-y-auto max-h-64">
-                            <!-- Loop qua mảng aiLogs -->
                             <template x-for="log in getPondLogs(selectedPond?.name)" :key="log.id">
                                 <div
                                     class="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-between">
@@ -249,7 +396,7 @@
                         </button>
                     </div>
 
-                    <!-- 4. DỰ BÁO THU HOẠCH -->
+                    <!-- 5. DỰ BÁO THU HOẠCH -->
                     <div class="card p-5 md:p-6 flex flex-col">
                         <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                             <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -259,7 +406,6 @@
                                 1/2026</span>
                         </div>
                         <div class="flex-1 flex flex-col space-y-5">
-                            <!-- KHỐI NGÀY THẢ TÔM MỚI THÊM -->
                             <div>
                                 <div class="flex justify-between items-center mb-1">
                                     <span class="text-sm font-bold text-slate-500 uppercase">Ngày thả tôm</span>
@@ -267,8 +413,6 @@
                                         x-text="formatDate(selectedPond?.stockingDate)"></span>
                                 </div>
                             </div>
-
-                            <!-- Các khối Tiến độ sinh trưởng và Ước tính trọng lượng giữ nguyên như cũ -->
                             <div>
                                 <div class="flex justify-between text-sm font-bold text-slate-700 mb-1">
                                     <span>Tiến độ sinh trưởng</span>
@@ -409,15 +553,26 @@
             </div>
         </div>
 
-        <!-- MODAL TRÍCH XUẤT QR TRUY XUẤT NGUỒN GỐC -->
+        <!-- ============================================================ -->
+        <!-- MODAL QR TRUY XUẤT NGUỒN GỐC                                -->
+        <!--                                                            -->
+        <!-- Bản trước của modal này in ra toàn số cứng: "Blockchain     -->
+        <!-- Verified", "100% Sạch bệnh", "pH TB 7.8-8.2", "cam kết      -->
+        <!-- không thể làm giả" — không có số nào là thật cả.            -->
+        <!--                                                            -->
+        <!-- Đây là giấy tờ đi kèm lô tôm bán ra. In số bịa lên đó là    -->
+        <!-- nói dối người mua. Nay lấy hết từ /api/trace: có gì hiện    -->
+        <!-- nấy, chưa có thì ghi "chưa khai báo".                       -->
+        <!-- ============================================================ -->
         <div x-show="showQRModal"
             class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
             style="display: none;">
             <div @click.away="showQRModal = false"
                 class="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-600 text-white">
+
+                <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-600 text-white shrink-0">
                     <h3 class="font-bold text-lg flex items-center gap-2">
-                        <i data-lucide="qr-code" class="w-5 h-5 text-blue-200"></i> Truy xuất nguồn gốc VAST
+                        <i data-lucide="qr-code" class="w-5 h-5 text-blue-200"></i> Truy xuất nguồn gốc
                     </h3>
                     <button @click="showQRModal = false"
                         class="text-white hover:bg-blue-700 p-2 rounded-full transition-colors">
@@ -426,57 +581,171 @@
                 </div>
 
                 <div class="p-6 overflow-y-auto no-scrollbar">
-                    <div class="flex justify-center mb-6">
-                        <div class="p-3 bg-white border-4 border-slate-100 rounded-2xl shadow-sm">
-                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=VAST-TRACE-12345"
-                                alt="QR Code" class="w-32 h-32 rounded-lg">
+
+                    <!-- Mã QR trỏ tới trang công khai trace.html -->
+                    <div class="flex justify-center mb-4">
+                        <div class="p-3 bg-white border-4 border-slate-100 rounded-2xl shadow-sm text-center">
+                            <!-- Mã QR do CHÍNH máy chủ này vẽ (server/qr.js).
+                                 Trước đây lấy ảnh từ api.qrserver.com nên mất mạng là mất mã,
+                                 và địa chỉ ao bị gửi sang máy chủ của bên thứ ba. -->
+                            <img :src="storeTraceQrUrl()" x-show="storeTraceCode()"
+                                alt="Mã QR truy xuất" class="w-36 h-36 rounded-lg mx-auto"
+                                onerror="this.style.display='none'; this.nextElementSibling.style.display='block'">
+                            <div style="display:none" class="w-36 h-36 flex items-center justify-center text-[11px] text-slate-400 font-medium p-2">
+                                Chưa vẽ được mã QR. Dùng mã bên dưới để tra cứu.
+                            </div>
                         </div>
                     </div>
 
-                    <div class="text-center mb-6">
-                        <span
-                            class="inline-flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 font-bold text-xs rounded-full uppercase tracking-wider">
-                            <i data-lucide="shield-check" class="w-4 h-4"></i> Blockchain Verified
-                        </span>
+                    <div class="text-center mb-5">
+                        <div class="font-black text-slate-800 tracking-wide" x-text="storeTraceCode() || '—'"></div>
+                        <a :href="storeTraceUrl()" target="_blank"
+                            class="text-xs text-blue-600 font-bold hover:underline break-all"
+                            x-text="storeTraceUrl()"></a>
+                        <!-- Nói rõ điện thoại người quét cần gì, vì đây là chỗ hay hỏng nhất -->
+                        <p x-show="qrLink && qrLink.ghi_chu" x-cloak
+                            class="text-[11px] text-slate-500 font-medium mt-1.5 px-4"
+                            x-text="qrLink && qrLink.ghi_chu"></p>
+                        <p x-show="qrLink && qrLink.canh_bao" x-cloak
+                            class="text-[11px] text-red-600 font-bold mt-1.5 px-4"
+                            x-text="qrLink && qrLink.canh_bao"></p>
                     </div>
 
-                    <div class="space-y-4">
-                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                            <h4 class="text-sm font-bold text-blue-600 mb-2 flex items-center gap-2"><i
-                                    data-lucide="map-pin" class="w-4 h-4"></i> Thông tin vùng nuôi</h4>
-                            <p class="text-sm text-slate-700 mt-1"><b>Mã số ao nuôi:</b> <span
-                                    x-text="selectedPond?.name"></span></p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Hộ nông dân:</b> Hợp tác xã Tôm sạch VAST
-                            </p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Tọa độ GPS:</b> 9°10'33.2"N 105°43'21.1"E
-                            </p>
-                        </div>
-                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                            <h4 class="text-sm font-bold text-amber-600 mb-2 flex items-center gap-2"><i
-                                    data-lucide="package-search" class="w-4 h-4"></i> Thông tin đầu vào</h4>
-                            <p class="text-sm text-slate-700 mt-1"><b>Nguồn giống:</b> Công ty CP Giống Thủy Sản
-                                (Lô
-                                G-882)</p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Thức ăn & Xử lý:</b> Cám tiêu chuẩn số 2,
-                                Vi sinh
-                                VAST-Bio</p>
-                        </div>
-                        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                            <h4 class="text-sm font-bold text-green-600 mb-2 flex items-center gap-2"><i
-                                    data-lucide="clipboard-check" class="w-4 h-4"></i> Quá trình chăm sóc</h4>
-                            <p class="text-sm text-slate-700 mt-1"><b>Ngày thả:</b> <span
-                                    x-text="formatDate(selectedPond?.stockingDate)"></span></p>
-                            <p class="text-sm text-slate-700 mt-1"><b>Ngừng thuốc:</b> 15 ngày trước thu hoạch
-                            </p>
-                        </div>
+                    <!-- Trạng thái niêm phong: THẬT, không phải nhãn dán -->
+                    <div class="flex justify-center mb-5">
+                        <template x-if="qrData && qrData.niem_phong">
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 font-bold text-xs rounded-full"
+                                :class="qrData.niem_phong.nguyen_ven ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'">
+                                <i :data-lucide="qrData.niem_phong.nguyen_ven ? 'shield-check' : 'shield-alert'" class="w-4 h-4"></i>
+                                <span x-text="qrData.niem_phong.nguyen_ven
+                                    ? 'Hồ sơ nguyên vẹn · ' + qrData.niem_phong.so_ban_ghi + ' bản ghi'
+                                    : 'Hồ sơ đã bị sửa sau khi lưu'"></span>
+                            </span>
+                        </template>
                     </div>
+
+                    <div x-show="qrLoading" class="py-8 text-center text-sm text-slate-400 font-medium">
+                        Đang tải hồ sơ…
+                    </div>
+
+                    <div x-show="!qrLoading && qrError" class="p-4 bg-red-50 border border-red-200 rounded-2xl">
+                        <p class="text-sm text-red-700 font-medium" x-text="qrError"></p>
+                    </div>
+
+                    <template x-if="!qrLoading && qrData">
+                        <div class="space-y-4">
+
+                            <!-- Cảnh báo ngừng thuốc -->
+                            <template x-for="c in (qrData.qua_trinh_nuoi?.ngung_thuoc?.canh_bao || [])" :key="c.lo">
+                                <div class="p-4 bg-red-50 border-2 border-red-300 rounded-2xl flex items-start gap-3">
+                                    <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600 shrink-0 mt-0.5"></i>
+                                    <div>
+                                        <div class="text-sm font-black text-red-800 mb-1">Cảnh báo tồn dư kháng sinh</div>
+                                        <p class="text-sm text-red-700 font-medium leading-relaxed" x-text="c.noi_dung"></p>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- 1. Vùng nuôi -->
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <h4 class="text-sm font-bold text-blue-600 mb-2 flex items-center gap-2">
+                                    <i data-lucide="map-pin" class="w-4 h-4"></i> Thông tin vùng nuôi
+                                </h4>
+                                <p class="text-sm text-slate-700 mt-1"><b>Mã cơ sở nuôi:</b>
+                                    <span x-text="qrData.vung_nuoi.ma_co_so_nuoi || 'Chưa khai báo'"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Mã nội bộ:</b>
+                                    <span x-text="qrData.vung_nuoi.ma_noi_bo"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Hộ nuôi:</b>
+                                    <span x-text="qrData.vung_nuoi.ho_nuoi || '—'"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Tọa độ GPS:</b>
+                                    <span x-text="qrData.vung_nuoi.gps || 'Chưa khai báo'"></span></p>
+                                <p class="text-[11px] text-slate-500 mt-2 leading-relaxed" x-text="qrData.vung_nuoi.ghi_chu_ma"></p>
+                            </div>
+
+                            <!-- 2. Đầu vào -->
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <h4 class="text-sm font-bold text-amber-600 mb-2 flex items-center gap-2">
+                                    <i data-lucide="package-search" class="w-4 h-4"></i> Thông tin đầu vào
+                                </h4>
+                                <template x-for="(items, nhom) in (qrData.dau_vao || {})" :key="nhom">
+                                    <div>
+                                        <template x-for="i in items" :key="i.ten + (i.ma_lo || '')">
+                                            <p class="text-sm text-slate-700 mt-1">
+                                                <b x-text="qrNhomLabel(nhom) + ':'"></b>
+                                                <span x-text="i.ten"></span>
+                                                <span class="text-slate-500" x-show="i.nha_cung_cap" x-text="' — ' + i.nha_cung_cap"></span>
+                                                <span class="text-slate-500" x-show="i.ma_lo" x-text="' (lô ' + i.ma_lo + ')'"></span>
+                                            </p>
+                                        </template>
+                                    </div>
+                                </template>
+                                <p class="text-sm text-slate-400 font-medium mt-1"
+                                    x-show="!qrCoDauVao()">Chưa khai báo đầu vào cho ao này.</p>
+                            </div>
+
+                            <!-- 3. Quá trình chăm sóc -->
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <h4 class="text-sm font-bold text-green-600 mb-2 flex items-center gap-2">
+                                    <i data-lucide="clipboard-check" class="w-4 h-4"></i> Quá trình chăm sóc
+                                </h4>
+                                <p class="text-sm text-slate-700 mt-1"><b>Ngày thả:</b>
+                                    <span x-text="formatDate(qrData.qua_trinh_nuoi.ngay_tha)"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Số ngày nuôi:</b>
+                                    <span class="font-bold text-blue-600" x-text="(qrData.qua_trinh_nuoi.so_ngay_nuoi ?? '—') + ' ngày'"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Cỡ tôm:</b>
+                                    <span x-text="qrData.qua_trinh_nuoi.co_tom_hien_tai || 'Chưa chài mẫu'"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Tổng cám đã cho ăn:</b>
+                                    <span x-text="formatNumber(qrData.qua_trinh_nuoi.tong_cam_da_cho_an_kg || 0) + ' kg'"></span></p>
+                                <p class="text-sm text-slate-700 mt-1"><b>Ngừng thuốc:</b>
+                                    <span x-text="qrData.qua_trinh_nuoi.ngung_thuoc?.co_dung_thuoc
+                                        ? ('an toàn từ ' + formatDate(qrData.qua_trinh_nuoi.ngung_thuoc.ngay_duoc_thu_som_nhat))
+                                        : 'Chưa ghi nhận dùng thuốc'"></span></p>
+                            </div>
+
+                            <!-- 4. Chỉ số môi trường — MÁY ĐO, không phải số cứng -->
+                            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                <h4 class="text-sm font-bold text-teal-600 mb-2 flex items-center gap-2">
+                                    <i data-lucide="activity" class="w-4 h-4"></i> Chỉ số môi trường
+                                </h4>
+                                <template x-if="qrData.chat_luong_nuoc">
+                                    <div>
+                                        <p class="text-sm text-slate-700 mt-1" x-show="qrData.chat_luong_nuoc.nhiet_do">
+                                            <b>Nhiệt độ TB:</b>
+                                            <span x-text="qrData.chat_luong_nuoc.nhiet_do.tb + '°C (' + qrData.chat_luong_nuoc.nhiet_do.thap_nhat + ' – ' + qrData.chat_luong_nuoc.nhiet_do.cao_nhat + ')'"></span>
+                                        </p>
+                                        <p class="text-sm text-slate-700 mt-1" x-show="qrData.chat_luong_nuoc.oxy_hoa_tan">
+                                            <b>Oxy hòa tan TB:</b>
+                                            <span x-text="qrData.chat_luong_nuoc.oxy_hoa_tan.tb + ' mg/L'"></span>
+                                        </p>
+                                        <p class="text-sm text-slate-700 mt-1" x-show="qrData.chat_luong_nuoc.ph">
+                                            <b>pH TB:</b> <span x-text="qrData.chat_luong_nuoc.ph.tb"></span>
+                                        </p>
+                                        <p class="text-[11px] text-slate-500 mt-2"
+                                            x-text="qrData.chat_luong_nuoc.khoang + ' · ' + formatNumber(qrData.chat_luong_nuoc.so_diem_do) + ' điểm đo · thiết bị ' + qrData.chat_luong_nuoc.thiet_bi"></p>
+                                    </div>
+                                </template>
+                                <p class="text-sm text-slate-400 font-medium mt-1" x-show="!qrData.chat_luong_nuoc">
+                                    Ao này chưa có thiết bị IoT ghi số liệu môi trường.
+                                </p>
+                            </div>
+
+                            <!-- Số liệu này từ đâu ra -->
+                            <div class="p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+                                <p class="text-[11px] text-blue-800 font-medium leading-relaxed"
+                                    x-text="qrData.do_tin_cay?.ghi_chu"></p>
+                            </div>
+
+                            <a :href="storeTraceUrl()" target="_blank"
+                                class="block w-full py-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-colors">
+                                Xem trang truy xuất đầy đủ
+                            </a>
+                        </div>
+                    </template>
                 </div>
             </div>
-
-
         </div>
 
-    </div>
+        </div>
 
     <!-- MODAL XÁC NHẬN XÓA AO -->
     <div x-show="showDeleteConfirmModal"
@@ -642,22 +911,33 @@
             <div class="p-6 flex-1 overflow-y-auto no-scrollbar space-y-3 bg-white">
                 <template x-for="txn in transactions.slice().reverse()" :key="txn.id">
                     <div
-                        class="p-4 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-full flex items-center justify-center font-bold"
+                        class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
+                        <!-- CỘT TRÁI: Dùng flex-1 min-w-0 để tự động thu hẹp và thêm dấu ... nếu ghi chú quá dài -->
+                        <div class="flex items-center gap-3 flex-1 min-w-0 mr-2">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0"
                                 :class="txn.type === 'chi' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'">
                                 <i :data-lucide="txn.type === 'chi' ? 'arrow-down-right' : 'arrow-up-right'"
-                                    class="w-6 h-6"></i>
+                                    class="w-5 h-5"></i>
                             </div>
-                            <div>
-                                <p class="font-bold text-slate-800 text-base" x-text="txn.category"></p>
-                                <p class="text-xs text-slate-500 font-medium mt-0.5"
+                            <div class="flex-1 min-w-0">
+                                <p class="font-bold text-slate-800 truncate" x-text="txn.category"></p>
+                                <p class="text-[11px] text-slate-500 font-medium truncate"
                                     x-text="formatDate(txn.date) + (txn.note ? ' - ' + txn.note : '')"></p>
                             </div>
                         </div>
-                        <p class="font-black text-right text-lg tracking-tight"
-                            :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
-                            x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+
+                        <!-- CỘT PHẢI: Dùng shrink-0 và whitespace-nowrap để bảo vệ số tiền không bị ép rớt dòng -->
+                        <div class="flex items-center gap-1 shrink-0">
+                            <p class="font-black text-right whitespace-nowrap text-sm sm:text-base"
+                                :class="txn.type === 'chi' ? 'text-red-600' : 'text-green-600'"
+                                x-text="(txn.type === 'chi' ? '-' : '+') + txn.amountFormatted + ' đ'"></p>
+
+                            <!-- Nút 3 chấm -->
+                            <button @click="openEditTransaction(txn)"
+                                class="p-2 ml-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-95 shrink-0">
+                                <i data-lucide="more-vertical" class="w-5 h-5"></i>
+                            </button>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -701,16 +981,29 @@
                     <canvas id="financePieChart"></canvas>
                 </div>
 
-                <div class="flex justify-between border-b border-slate-100 pb-4 mb-6">
-                    <p class="text-center text-sm font-bold text-slate-600 flex-1 border-r border-slate-100">
-                        Tổng thu:
-                        <br><span class="text-green-600 text-lg font-black"
-                            x-text="formatNumber(totalIncome) + ' đ'"></span>
-                    </p>
-                    <p class="text-center text-sm font-bold text-slate-600 flex-1">Tổng chi:
-                        <br><span class="text-red-600 text-lg font-black"
-                            x-text="formatNumber(totalExpense) + ' đ'"></span>
-                    </p>
+                <div class="grid grid-cols-2 gap-3 mb-6">
+                    <div class="bg-green-50 p-3 rounded-xl border border-green-200 text-center">
+                        <p class="text-[11px] font-bold text-green-700 uppercase tracking-wide mb-0.5">Tổng thu</p>
+                        <p class="text-lg font-black text-green-600" x-text="formatNumber(totalIncome) + ' đ'"></p>
+                    </div>
+                    <div class="bg-red-50 p-3 rounded-xl border border-red-200 text-center">
+                        <p class="text-[11px] font-bold text-red-700 uppercase tracking-wide mb-0.5">Tổng chi</p>
+                        <p class="text-lg font-black text-red-600" x-text="formatNumber(totalExpense) + ' đ'"></p>
+                    </div>
+                    <div
+                        class="bg-amber-50 p-3 rounded-xl border border-amber-200 text-center col-span-2 flex justify-between items-center px-4">
+                        <p class="text-xs font-bold text-amber-800 uppercase flex items-center gap-1.5"><i
+                                data-lucide="zap" class="w-4 h-4"></i> Tiền điện (Tự động)</p>
+                        <p class="text-lg font-black text-amber-600"
+                            x-text="'-' + formatNumber(totalElectricityCost) + ' đ'"></p>
+                    </div>
+                    <div
+                        class="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center col-span-2 shadow-lg flex justify-between items-center px-5">
+                        <p class="text-sm font-bold text-slate-300 uppercase tracking-wider">Tổng số dư</p>
+                        <p class="text-2xl font-black"
+                            :class="calculateBalance() >= 0 ? 'text-green-400' : 'text-red-400'"
+                            x-text="formatNumber(calculateBalance()) + ' đ'"></p>
+                    </div>
                 </div>
 
                 <button @click="downloadExcel()"
@@ -743,13 +1036,22 @@
                         class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
                 </div>
                 <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Diện tích ao nuôi (m²) <span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="newPondArea" placeholder="Ví dụ: 1000"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+                <div>
                     <label class="block text-sm font-bold text-slate-600 mb-1">Ngày thả tôm</label>
                     <input type="date" x-model="newPondDate"
                         class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
                 </div>
                 <div>
-                    <label class="block text-sm font-bold text-slate-600 mb-1">Số lượng tôm giống (con)</label>
-                    <input type="number" x-model="newPondShrimpCount" placeholder="Ví dụ: 500000"
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Số lượng tôm giống (con)<span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="newPondShrimpCount" placeholder="Ví dụ: 500000"
                         class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
                 </div>
                 <!-- THÊM TÊN CON GIỐNG -->
@@ -758,6 +1060,58 @@
                             class="text-red-500">*</span></label>
                     <input type="text" x-model="newPondSeed" placeholder="Ví dụ: Tôm thẻ chân trắng"
                         class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                </div>
+
+                <!-- ============================================================
+                     GẮN THIẾT BỊ ESP32 VÀO AO
+                     Đây là chỗ nối giữa web và phần cứng. Không chọn thiết bị
+                     thì ao vẫn tạo được, nhưng sẽ KHÔNG có số cảm biến nào và
+                     máy cho ăn không nhận lệnh — vì server không biết ESP32
+                     nào thuộc về ao này.
+                     ============================================================ -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Thiết bị ESP32</label>
+                    <div class="relative">
+                        <select x-model="newPondDevice"
+                            class="w-full p-3 pr-10 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base appearance-none cursor-pointer">
+                            <option value="">— Chưa gắn thiết bị —</option>
+                            <template x-for="d in storeFreeDevices()" :key="d.device_id">
+                                <option :value="d.device_id"
+                                    x-text="d.device_id + (d.online ? ' (đang online)' : (d.da_tung_gui ? ' (offline)' : ' (chưa gửi dữ liệu lần nào)'))"></option>
+                            </template>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"></i>
+                    </div>
+
+                    <!-- ============================================================ -->
+                    <!-- NÓI RÕ VÌ SAO Ô NÀY TRỐNG.                                   -->
+                    <!-- Trước đây ô trống mà không giải thích, người dùng không biết -->
+                    <!-- là chưa đăng ký thiết bị, hay ESP32 không gọi tới được máy   -->
+                    <!-- chủ, hay thiết bị đang thuộc tài khoản khác — ba nguyên nhân -->
+                    <!-- khác hẳn nhau, cách xử lý cũng khác.                          -->
+                    <!-- ============================================================ -->
+                    <template x-if="storeDeviceHint()">
+                        <p class="text-[11px] font-medium mt-1.5 leading-relaxed p-2.5 rounded-lg"
+                            :class="storeDeviceHint().muc === 'chua_dang_ky'
+                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                : 'bg-blue-50 text-blue-800 border border-blue-200'"
+                            x-text="storeDeviceHint().text"></p>
+                    </template>
+
+                    <!-- Thiết bị máy chủ CÓ biết nhưng đang vướng -> hiện kèm lý do, -->
+                    <!-- không giấu đi, để người dùng biết đường gỡ.                  -->
+                    <template x-for="d in storeBlockedDevices()" :key="'blk_' + d.device_id">
+                        <p class="text-[11px] text-slate-500 font-medium mt-1 flex items-start gap-1.5">
+                            <i data-lucide="lock" class="w-3 h-3 mt-0.5 shrink-0"></i>
+                            <span><b x-text="d.device_id"></b> — <span x-text="d.ly_do"></span></span>
+                        </p>
+                    </template>
+
+                    <p class="text-[11px] text-slate-500 font-medium mt-1.5"
+                        x-show="storeFreeDevices().length > 0 && !storeDeviceHint()">
+                        Chọn đúng thiết bị đang lắp ở ao này. Không chọn thì ao sẽ không có số cảm biến.
+                    </p>
                 </div>
             </div>
             <div class="p-6 flex gap-4 bg-slate-50 border-t border-slate-100">
@@ -797,6 +1151,617 @@
         </div>
     </div>
 
+    <!-- ================= MODAL CÀI ĐẶT VÂN TAY ================= -->
+    <div x-show="showFingerprintModal"
+        class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+
+        <div @click.away="if(fingerprintStep !== 'scanning') showFingerprintModal = false" x-show="showFingerprintModal"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl text-center border border-slate-100">
+
+            <div class="p-8">
+                <!-- Khu vực Icon Trạng thái có hiệu ứng -->
+                <div class="w-24 h-24 mx-auto rounded-full flex items-center justify-center mb-6 relative"
+                    :class="fingerprintStep === 'scanning' ? 'bg-blue-50' : (fingerprintStep === 'success' ? 'bg-green-50' : 'bg-red-50')">
+
+                    <!-- Vòng tròn hiệu ứng toả ra (chỉ chạy khi đang quét) -->
+                    <div x-show="fingerprintStep === 'scanning'"
+                        class="absolute inset-0 border-4 border-blue-400 rounded-full animate-ping opacity-30"></div>
+
+                    <!-- Icon Lucide đổi màu theo trạng thái -->
+                    <i data-lucide="fingerprint" class="w-12 h-12 transition-colors duration-300" :class="{
+                       'text-blue-500 animate-pulse': fingerprintStep === 'scanning',
+                       'text-green-500': fingerprintStep === 'success',
+                       'text-red-500': fingerprintStep === 'error'
+                   }"></i>
+                </div>
+
+                <!-- Tiêu đề & Nội dung -->
+                <h3 class="font-black text-2xl text-slate-800 mb-2 tracking-tight"
+                    x-text="fingerprintStep === 'scanning' ? 'Quét vân tay' : (fingerprintStep === 'success' ? 'Thành công!' : 'Thất bại')">
+                </h3>
+
+                <p class="text-slate-500 font-medium text-sm"
+                    x-text="fingerprintStep === 'scanning' ? 'Vui lòng chạm vào cảm biến vân tay trên thiết bị của bạn...' : (fingerprintStep === 'success' ? 'Đã liên kết dữ liệu sinh trắc học.' : 'Không nhận diện được vân tay, vui lòng thử lại.')">
+                </p>
+            </div>
+
+            <!-- Nút Hủy (Chỉ hiện khi đang chờ quét) -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100" x-show="fingerprintStep === 'scanning'">
+                <button @click="cancelFingerprint()"
+                    class="w-full py-3.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95 shadow-sm">
+                    Hủy bỏ
+                </button>
+            </div>
+
+            <!-- Nút Đóng (Chỉ hiện khi đã quét Xong/Lỗi) -->
+            <div class="p-4 bg-slate-50 border-t border-slate-100" x-show="fingerprintStep !== 'scanning'"
+                style="display: none;">
+                <button @click="showFingerprintModal = false"
+                    class="w-full py-3.5 text-white font-bold rounded-xl transition-colors active:scale-95 shadow-md"
+                    :class="fingerprintStep === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'">
+                    Hoàn tất
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL NẠP THỨC ĂN (THEO SKETCH 3 BƯỚC) ================= -->
+    <div x-show="showFeedModal"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="if (!showErrorModal) showFeedModal = false"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100">
+
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+                <h3 class="font-black text-xl text-slate-800 flex items-center gap-2">
+                    <i data-lucide="package-plus" class="w-6 h-6 text-amber-500"></i> Nạp Thức Ăn
+                </h3>
+                <button @click="showFeedModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full transition-colors">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <!-- BƯỚC 2 (Trong sketch): Chọn Ao -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Chọn ao nuôi <span
+                            class="text-red-500">*</span></label>
+                    <div class="relative">
+                        <select x-model="feedPondId"
+                            class="w-full p-4 pr-10 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-amber-500 font-bold text-slate-800 text-base appearance-none cursor-pointer">
+                            <!-- Danh sách ao động -->
+                            <template x-for="pond in ponds" :key="pond.id">
+                                <option :value="pond.id" x-text="pond.name"></option>
+                            </template>
+                        </select>
+                        <i data-lucide="chevron-down"
+                            class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"></i>
+                    </div>
+                </div>
+
+                <!-- BƯỚC 3 (Trong sketch): Số kg nạp vào -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Số kg thức ăn nạp vào <span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="feedAmount" placeholder="Ví dụ: 50"
+                        class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-amber-500 font-bold text-lg text-slate-800">
+                </div>
+
+                <!-- BƯỚC 3 (Trong sketch): Ngưỡng cảnh báo -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Ngưỡng cảnh báo khi hết thức ăn <span
+                            class="text-red-500">*</span></label>
+                    <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                        x-model="feedAlertThreshold" placeholder="Ví dụ: 20"
+                        class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-amber-500 font-bold text-lg text-slate-800">
+                    <p class="text-[13px] text-slate-500 font-medium mt-2 flex items-start gap-1">
+                        <i data-lucide="info" class="w-4 h-4 text-blue-500 shrink-0"></i>
+                        AI sẽ tự động báo khi lượng thức ăn còn lại bằng ngưỡng này.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Nút Xác nhận -->
+            <div class="p-6 flex gap-4 bg-slate-50 border-t border-slate-100">
+                <button @click="showFeedModal = false"
+                    class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95 shadow-sm">
+                    Hủy bỏ
+                </button>
+                <button @click="confirmFeed()"
+                    class="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg shadow-amber-200 active:scale-95 transition-all">
+                    Xác nhận nạp
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: KIỂM TRA MÁY CHO ĂN                                  -->
+    <!--                                                            -->
+    <!-- Trước đây muốn thử máy phải cắm laptop vào ESP32 rồi gõ     -->
+    <!-- TEST1/TEST2 trong Serial Monitor. Ra ao thì không ai mang   -->
+    <!-- laptop theo. Giờ bấm ngay trên điện thoại.                  -->
+    <!--                                                            -->
+    <!-- Server CHỈ đặt lệnh vào hàng đợi. ESP32 lấy lệnh trong 1-3  -->
+    <!-- giây rồi tự quay motor và báo trạng thái THẬT về — giống    -->
+    <!-- hệt cách điều khiển bơm và guồng oxy.                       -->
+    <!-- ============================================================ -->
+    <div x-show="feedTest.show"
+        class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="feedTest.show = false"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl max-h-[90vh] flex flex-col"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-amber-50 shrink-0">
+                <h3 class="font-bold text-lg text-amber-800 flex items-center gap-2">
+                    <i data-lucide="wrench" class="w-5 h-5 text-amber-600"></i> Kiểm tra máy cho ăn
+                </h3>
+                <button @click="feedTest.show = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5 overflow-y-auto">
+
+                <!-- Trạng thái THẬT do ESP32 báo lên -->
+                <div class="p-4 rounded-2xl border flex items-center gap-3"
+                    :class="feedMayDangChay() ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+                        :class="feedMayDangChay() ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'">
+                        <i data-lucide="cpu" class="w-5 h-5" :class="feedMayDangChay() && 'animate-pulse'"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Máy đang</p>
+                        <p class="font-black text-slate-800"
+                            x-text="feedMayTrangThai() ? feedMayTrangThai().state : 'chưa có tín hiệu'"></p>
+                    </div>
+                    <div class="ml-auto text-right shrink-0" x-show="feedHeSoHienTai() !== null">
+                        <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Hệ số</p>
+                        <p class="font-black text-slate-800 text-sm">
+                            <span x-text="feedNum(feedHeSoHienTai())"></span>
+                            <span class="text-[11px] font-semibold text-slate-400">g/giây</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div x-show="feedTest.loi" x-cloak
+                    class="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium"
+                    x-text="feedTest.loi"></div>
+
+                <!-- ============================================================
+                     CHẨN ĐOÁN: lệnh đã tới ESP32 chưa
+                     Bấm nút mà motor không quay thì có 2 khả năng khác hẳn nhau:
+                     lệnh chưa tới (lỗi mạng) hay lệnh đã tới (lỗi phần cứng).
+                     Phân biệt được là biết phải đi sửa ở đâu.
+                     ============================================================ -->
+                <template x-if="feedTest.chanDoan">
+                    <div class="p-4 rounded-2xl border"
+                        :class="{
+                            'bg-red-50 border-red-200': feedTest.chanDoan.muc === 'danger',
+                            'bg-amber-50 border-amber-200': feedTest.chanDoan.muc === 'warning' || feedTest.chanDoan.muc === 'da_nhan',
+                            'bg-slate-50 border-slate-200': feedTest.chanDoan.muc === 'info'
+                        }">
+                        <div class="flex items-start gap-2.5">
+                            <i :data-lucide="feedTest.chanDoan.muc === 'danger' ? 'wifi-off'
+                                : (feedTest.chanDoan.muc === 'warning' ? 'plug-zap'
+                                : (feedTest.chanDoan.muc === 'da_nhan' ? 'help-circle' : 'radio'))"
+                                class="w-4 h-4 shrink-0 mt-0.5"
+                                :class="{
+                                    'text-red-600': feedTest.chanDoan.muc === 'danger',
+                                    'text-amber-600': feedTest.chanDoan.muc === 'warning' || feedTest.chanDoan.muc === 'da_nhan',
+                                    'text-slate-400': feedTest.chanDoan.muc === 'info'
+                                }"></i>
+                            <div class="min-w-0">
+                                <p class="text-xs font-bold leading-relaxed"
+                                    :class="{
+                                        'text-red-800': feedTest.chanDoan.muc === 'danger',
+                                        'text-amber-800': feedTest.chanDoan.muc === 'warning',
+                                        'text-slate-700': feedTest.chanDoan.muc === 'info'
+                                    }"
+                                    x-text="feedTest.chanDoan.ket_luan"></p>
+
+                                <p class="text-[11px] text-slate-500 font-medium mt-1"
+                                    x-show="feedTest.chanDoan.lenh_moi_nhat">
+                                    Lệnh gần nhất:
+                                    <b x-text="feedTest.chanDoan.lenh_moi_nhat?.command"></b>
+                                    = <b x-text="feedTest.chanDoan.lenh_moi_nhat?.value"></b>
+                                    · trạng thái
+                                    <b x-text="({pending:'chưa ai lấy', sent:'ESP32 đã lấy', done:'đã thực hiện xong', ignored:'bị thay bằng lệnh mới'})[feedTest.chanDoan.lenh_moi_nhat?.status] || feedTest.chanDoan.lenh_moi_nhat?.status"></b>
+                                </p>
+
+                                <!-- ============================================================ -->
+                                <!-- ESP32 đã nhận lệnh. Máy chủ KHÔNG BIẾT motor có quay hay      -->
+                                <!-- không — không có cảm biến nào báo về. Nên HỎI, đừng đoán.     -->
+                                <!-- ============================================================ -->
+                                <div x-show="feedTest.chanDoan.muc === 'da_nhan' && feedTest.motorQuay === null"
+                                    class="mt-2 pt-2 border-t border-amber-200">
+                                    <p class="text-[11px] font-bold text-amber-800 mb-2">Motor có quay không?</p>
+                                    <div class="flex gap-2">
+                                        <button @click="feedTest.motorQuay = true"
+                                            class="flex-1 py-2 bg-green-600 hover:bg-green-700 text-white text-[11px] font-bold rounded-lg active:scale-95 transition">
+                                            Có, motor quay
+                                        </button>
+                                        <button @click="feedTest.motorQuay = false"
+                                            class="flex-1 py-2 bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 text-[11px] font-bold rounded-lg active:scale-95 transition">
+                                            Không quay
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div x-show="feedTest.motorQuay === true" x-cloak
+                                    class="mt-2 pt-2 border-t border-amber-200">
+                                    <p class="text-[11px] font-bold text-green-700">
+                                        Máy cho ăn chạy được. Sang <b>BƯỚC 2 — HIỆU CHUẨN</b> bên dưới
+                                        để máy biết mỗi giây ra bao nhiêu gam cám.
+                                    </p>
+                                </div>
+
+                                <!-- Đã nhận lệnh mà motor không quay -> chỉ thẳng chỗ hay hỏng -->
+                                <div x-show="feedTest.chanDoan.muc === 'warning' || feedTest.motorQuay === false"
+                                    class="mt-2 pt-2 border-t border-amber-200">
+                                    <p class="text-[11px] font-bold text-amber-800 mb-1">Kiểm theo thứ tự này:</p>
+                                    <ol class="text-[11px] text-amber-800 font-medium space-y-0.5 list-decimal list-inside leading-relaxed">
+                                        <li><b>Chân EEP</b> của DRV8833 — nối vào <b>3V3</b> của ESP32. Để trống là chip ngủ, motor không quay.</li>
+                                        <li><b>Adapter 5V</b> đã cắm điện chưa, có vào chân VCC của DRV8833 không</li>
+                                        <li><b>GND chung</b> giữa adapter và ESP32</li>
+                                        <li>Dây motor có siết chặt trong OUT1/OUT2 và OUT3/OUT4 không</li>
+                                    </ol>
+                                </div>
+                            </div>
+
+                            <button @click="feedKiemTraLenh()" title="Kiểm tra lại"
+                                class="ml-auto shrink-0 p-1.5 rounded-lg hover:bg-white/60 text-slate-400">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- BƯỚC 1: chạy thử từng motor -->
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-1">
+                        Bước 1 — Thử từng motor
+                    </p>
+                    <p class="text-[11px] text-slate-500 font-medium mb-3 leading-relaxed">
+                        <b>Tháo cám ra khỏi thùng trước.</b> Chạy khan để nghe motor quay
+                        và xem đúng chiều chưa. Mỗi lần 3 giây.
+                    </p>
+                    <div class="flex gap-2">
+                        <button @click="feedThuMotor(1)" :disabled="feedTest.busy"
+                            class="flex-1 py-3 bg-white border-2 border-slate-200 hover:border-amber-400 text-slate-700 text-sm font-bold rounded-xl active:scale-95 transition disabled:opacity-50">
+                            Motor 1<br><span class="text-[11px] font-semibold text-slate-400">Vít tải N20</span>
+                        </button>
+                        <button @click="feedThuMotor(2)" :disabled="feedTest.busy"
+                            class="flex-1 py-3 bg-white border-2 border-slate-200 hover:border-amber-400 text-slate-700 text-sm font-bold rounded-xl active:scale-95 transition disabled:opacity-50">
+                            Motor 2<br><span class="text-[11px] font-semibold text-slate-400">Đĩa văng 130</span>
+                        </button>
+                    </div>
+                    <label class="flex items-center gap-2 mt-3 cursor-pointer">
+                        <input type="checkbox" x-model="feedTest.giuLau"
+                            class="w-4 h-4 rounded border-slate-300 text-amber-500 focus:ring-amber-400">
+                        <span class="text-[11px] font-bold text-slate-600">
+                            Giữ 15 giây để kịp cắm đồng hồ đo
+                        </span>
+                    </label>
+                    <p class="text-[11px] text-slate-500 font-medium mt-1 leading-relaxed" x-show="feedTest.giuLau">
+                        Đo giữa <b>OUT1–OUT2</b> (motor 1) hoặc <b>OUT3–OUT4</b> (motor 2):
+                        có ~4–5V mà motor không quay → motor hỏng hoặc kẹt.
+                        Không có điện → chân <b>EEP</b> chưa nối, hoặc <b>VCC</b> chưa có nguồn.
+                    </p>
+
+                    <p class="text-[11px] text-slate-500 font-medium mt-2.5 leading-relaxed">
+                        Quay sai chiều? Đổi <b>FEED_VIT_REVERSE</b> hoặc <b>FEED_DIA_REVERSE</b>
+                        thành 1 trong <b>feeder.h</b> rồi nạp lại.
+                    </p>
+                </div>
+
+                <!-- BƯỚC 2: hiệu chuẩn -->
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-1">
+                        Bước 2 — Hiệu chuẩn
+                    </p>
+                    <p class="text-[11px] text-slate-500 font-medium mb-3 leading-relaxed">
+                        Đổ cám vào thùng, hứng xô dưới miệng ra cám. Bấm chạy, cân chỗ cám vừa ra,
+                        nhập số gam vào đây. <b>ESP32 tự lưu, không cần nạp lại code.</b>
+                    </p>
+
+                    <div class="flex gap-2 items-end mb-3">
+                        <div class="w-24">
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5">Số giây</label>
+                            <input type="number" min="1" max="60" x-model="feedTest.calibGiay"
+                                class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+                        </div>
+                        <button @click="feedChayHieuChuan()" :disabled="feedTest.busy"
+                            class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-200 active:scale-95 transition disabled:opacity-50">
+                            Chạy vít tải
+                        </button>
+                    </div>
+
+                    <div x-show="feedTest.daChayCalib" x-cloak class="pt-3 border-t border-slate-200">
+                        <label class="block text-xs font-bold text-slate-600 mb-1.5">
+                            Cân được bao nhiêu gam?
+                        </label>
+                        <input type="number" min="1" step="0.1" x-model="feedTest.calibGam"
+                            placeholder="Ví dụ: 250"
+                            class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+
+                        <p class="text-sm font-bold text-green-700 mt-2" x-show="feedHeSoTinhDuoc() !== null">
+                            → <span x-text="feedNum(feedHeSoTinhDuoc())"></span> g/giây
+                        </p>
+
+                        <button @click="feedLuuHieuChuan()"
+                            :disabled="feedTest.busy || feedHeSoTinhDuoc() === null"
+                            class="w-full mt-3 py-3 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl shadow-md active:scale-95 transition disabled:opacity-40">
+                            Lưu hệ số vào ESP32
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Dừng khẩn -->
+                <button @click="feedDungMay()" :disabled="feedTest.busy"
+                    class="w-full py-3 bg-red-50 border-2 border-red-200 hover:bg-red-100 text-red-700 font-bold rounded-2xl active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2">
+                    <i data-lucide="octagon-x" class="w-5 h-5"></i>
+                    Dừng máy ngay
+                </button>
+
+                <p class="text-[11px] text-slate-400 font-medium leading-relaxed text-center">
+                    Server chỉ đặt lệnh vào hàng đợi. ESP32 lấy trong 1–3 giây rồi tự quay motor
+                    và báo trạng thái thật về — giống hệt cách điều khiển bơm và guồng oxy.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: CHÀI MẪU & THÔNG SỐ MÁY CHO ĂN                       -->
+    <!-- Đây là chỗ nhập 3 con số mà công thức cần:                   -->
+    <!--   số giống thả, tỷ lệ sống, trọng lượng trung bình (chài mẫu)-->
+    <!-- ============================================================ -->
+    <div x-show="feed.showSetupModal"
+        class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="feed.showSetupModal = false"
+            class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl max-h-[90vh] flex flex-col"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-amber-50 shrink-0">
+                <h3 class="font-bold text-lg text-amber-800 flex items-center gap-2">
+                    <i data-lucide="ruler" class="w-5 h-5 text-amber-600"></i> Chài mẫu &amp; thông số cho ăn
+                </h3>
+                <button @click="feed.showSetupModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5 overflow-y-auto">
+
+                <!-- BƯỚC 1 -->
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-3">Bước 1 — Số tôm dưới ao</p>
+
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Số con giống đã thả</label>
+                    <input type="number" min="0" x-model="feed.setupSeedCount" placeholder="Ví dụ: 300000"
+                        class="w-full p-3.5 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+
+                    <label class="block text-sm font-bold text-slate-700 mb-2 mt-4">Tỷ lệ sống dự kiến (%)</label>
+                    <input type="number" min="1" max="100" x-model="feed.setupSurvivalPct" placeholder="Ví dụ: 85"
+                        class="w-full p-3.5 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+
+                    <p class="text-[11px] text-slate-500 font-medium mt-2"
+                        x-show="Number(feed.setupSeedCount) > 0 && Number(feed.setupSurvivalPct) > 0">
+                        → Còn khoảng
+                        <b class="text-slate-700"
+                            x-text="feedNum(Math.round(Number(feed.setupSeedCount) * Number(feed.setupSurvivalPct) / 100))"></b>
+                        con dưới ao
+                    </p>
+                </div>
+
+                <!-- BƯỚC 2 -->
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-1">Bước 2 — Trọng lượng trung bình</p>
+                    <p class="text-[11px] text-slate-500 font-medium mb-3 leading-relaxed">
+                        Chài khoảng 30 con, cân lên rồi nhập vào đây. Nên làm <b>mỗi tuần một lần</b> —
+                        đây là con số quyết định độ chính xác của cả khẩu phần.
+                    </p>
+
+                    <div class="flex gap-3">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5">Số con chài</label>
+                            <input type="number" min="1" x-model="feed.setupSampleCount" placeholder="30"
+                                class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5">Tổng cân nặng (g)</label>
+                            <input type="number" min="1" x-model="feed.setupTotalWeightG" placeholder="390"
+                                class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+                        </div>
+                    </div>
+
+                    <p class="text-[11px] font-bold text-green-700 mt-2" x-show="feedSampleAvg() !== null">
+                        → <span x-text="feedNum(feedSampleAvg())"></span> g/con
+                        (khoảng <span x-text="Math.round(1000 / feedSampleAvg())"></span> con/kg)
+                    </p>
+
+                    <label class="block text-xs font-bold text-slate-600 mb-1.5 mt-4">Hoặc nhập thẳng g/con</label>
+                    <input type="number" min="0" step="0.1" x-model="feed.setupAvgWeightG" placeholder="Ví dụ: 13"
+                        :disabled="feedSampleAvg() !== null"
+                        class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800 disabled:bg-slate-100 disabled:text-slate-400">
+                </div>
+
+                <!-- MÁY CHO ĂN -->
+                <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p class="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-3">Máy cho ăn</p>
+
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Sức chứa thùng cám (kg)</label>
+                    <input type="number" min="1" x-model="feed.setupStockMaxKg" placeholder="Ví dụ: 15"
+                        class="w-full p-3.5 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+
+                    <label class="block text-sm font-bold text-slate-700 mb-2 mt-4">Giờ cho ăn trong ngày</label>
+                    <input type="text" x-model="feed.setupMealTimes" placeholder="06:00, 10:00, 14:00, 18:00"
+                        class="w-full p-3.5 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+                    <p class="text-[11px] text-slate-500 font-medium mt-2">Ngăn cách bằng dấu phẩy. Có bao nhiêu giờ là bấy nhiêu cữ.</p>
+                </div>
+
+                <!-- Nhắc điều quan trọng nhất -->
+                <div class="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3">
+                    <i data-lucide="info" class="w-5 h-5 text-blue-600 shrink-0 mt-0.5"></i>
+                    <p class="text-xs text-blue-800 font-medium leading-relaxed">
+                        Con số máy tính ra là <b>điểm xuất phát</b>, không phải lệnh cuối cùng.
+                        Sau mỗi cữ 1,5–2 giờ hãy kiểm tra <b>sàng ăn</b>: còn thừa thì giảm, hết sạch thì tăng.
+                        Máy không nhìn được sàng ăn.
+                    </p>
+                </div>
+            </div>
+
+            <div class="p-6 flex gap-4 bg-slate-50 border-t border-slate-100 shrink-0">
+                <button @click="feed.showSetupModal = false"
+                    class="flex-1 py-4 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-2xl transition-colors active:scale-95 shadow-sm">
+                    Hủy bỏ
+                </button>
+                <button @click="feedSaveSetup()" :disabled="feed.loading"
+                    class="flex-1 py-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-2xl shadow-lg shadow-amber-200 active:scale-95 transition-all disabled:opacity-50"
+                    x-text="feed.loading ? 'Đang lưu...' : 'Lưu &amp; tính lại'">
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CẬP NHẬT GIÁ ĐIỆN -->
+    <!-- Modal nhập giá vật tư ĐÃ BỎ cùng với thẻ Giá Vật Tư Đầu Vào. -->
+
+    <div x-show="showElectricityPriceModal"
+        class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showElectricityPriceModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-amber-50">
+                <h3 class="font-bold text-lg text-amber-800 flex items-center gap-2"><i data-lucide="zap"
+                        class="w-5 h-5 text-amber-600"></i> Cập nhật Giá điện</h3>
+                <button @click="showElectricityPriceModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6">
+                <label class="block text-sm font-bold text-slate-600 mb-2">Nhập giá điện mới (VNĐ/kWh)</label>
+                <input type="number" min="1" oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                    x-model="tempElectricityPrice" placeholder="Ví dụ: 2500"
+                    class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-black text-xl text-center text-slate-800 transition-colors">
+            </div>
+            <div class="p-5 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showElectricityPriceModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all active:scale-95">Hủy</button>
+                <button @click="saveElectricityPrice()"
+                    class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all">Lưu
+                    thay đổi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL SỬA GIAO DỊCH -->
+    <div x-show="showEditTransactionModal"
+        class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showEditTransactionModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center"
+                :class="editTxnType === 'chi' ? 'bg-red-50' : 'bg-green-50'">
+                <h3 class="font-bold text-lg flex items-center gap-2"
+                    :class="editTxnType === 'chi' ? 'text-red-800' : 'text-green-800'">
+                    <i data-lucide="edit-3" class="w-5 h-5"></i> Sửa giao dịch
+                </h3>
+                <button @click="showEditTransactionModal = false"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full"><i data-lucide="x"
+                        class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Số tiền (VNĐ)</label>
+                    <input type="text" x-model="editTxnAmount" @input="formatEditCurrency()"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-black text-xl text-right text-slate-800">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Danh mục</label>
+                    <select x-model="editTxnCategory"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-800 appearance-none">
+                        <template x-if="editTxnType === 'chi'">
+                            <optgroup label="Khoản chi">
+                                <option>Thức ăn</option>
+                                <option>Thuốc men</option>
+                                <option>Con giống</option>
+                                <option>Thiết bị</option>
+                                <option>Khác</option>
+                            </optgroup>
+                        </template>
+                        <template x-if="editTxnType === 'thu'">
+                            <optgroup label="Khoản thu">
+                                <option>Bán tôm</option>
+                                <option>Thu khác</option>
+                            </optgroup>
+                        </template>
+                    </select>
+                </div>
+                <!-- Ô Ghi chú mới thêm -->
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-1">Ghi chú (Tùy chọn)</label>
+                    <input type="text" x-model="editTxnNote" placeholder="Ví dụ: Mua cám cty A"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-slate-800">
+                </div>
+            </div>
+            <div class="p-5 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showEditTransactionModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all active:scale-95">Hủy</button>
+                <button @click="saveEditedTransaction()"
+                    class="flex-1 py-3 text-white font-bold rounded-xl shadow-md active:scale-95 transition-all"
+                    :class="editTxnType === 'chi' ? 'bg-red-500 hover:bg-red-600' : 'bg-green-600 hover:bg-green-700'">Cập
+                    nhật</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL XÁC NHẬN XÓA GIAO DỊCH -->
+    <div x-show="showDeleteTxnModal"
+        class="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <div @click.away="showDeleteTxnModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+            <div class="p-6 text-center">
+                <div
+                    class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="trash-2" class="w-8 h-8"></i>
+                </div>
+                <h3 class="font-black text-xl text-slate-800 mb-2">Xóa Giao Dịch</h3>
+                <p class="text-slate-600 text-sm font-medium">Bạn có chắc chắn muốn xóa khoản thu/chi này không? Dữ liệu
+                    không thể khôi phục.</p>
+            </div>
+            <div class="p-4 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button @click="showDeleteTxnModal = false"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-colors active:scale-95">Hủy
+                    bỏ</button>
+                <button @click="executeDeleteTransaction()"
+                    class="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors shadow-lg shadow-red-200 active:scale-95">Xóa
+                    ngay</button>
+            </div>
+        </div>
+    </div>
+
     <!-- JAVASCRIPT LOGIC -->
     <script>
         function farmApp() {
@@ -804,6 +1769,14 @@
                 // ===== GAN MODULE KET NOI ESP32 THAT (js/iot.js) =====
                 // Dat o dau de cac thuoc tinh ben duoi van uu tien neu trung ten.
                 ...iotModule(),
+                // ===== GIA TOM THI TRUONG THAT (js/market.js) =====
+                ...marketModule(),
+                // ===== MAY CHO AN TU DONG (js/feed.js) =====
+                ...feedModule(),
+                // ===== LUU DU LIEU THAT: user / ao / so sach / nhat ky (js/store.js) =====
+                ...storeModule(),
+                // ===== TRO LY: giong noi that + co van + hoi dap (js/ai.js) =====
+                ...aiModule(),
 
                 currentView: 'dashboard',
                 currentTime: '',
@@ -814,6 +1787,10 @@
                 // Alpine boc Proxy len moi thuoc tinh, lam Chart.js goi update()
                 // khong ve lai duoc. Bieu do gio giu trong js/iot.js,
                 // truy cap qua iotGetChart('overview' | 'detail' | 'finance').
+                showFeedModal: false,
+                feedPondId: '',
+                feedAmount: '',
+                feedAlertThreshold: '', // Mặc định hiển thị là 30 như sketch
 
                 selectedPondId: null,
                 chartTimeframe: '1d',
@@ -835,13 +1812,37 @@
                 showAllTransactionsModal: false,
                 showAddPondModal: false,
                 newPondName: '',
+                newPondArea: '',
                 newPondSeed: '',
                 newPondDate: new Date().toISOString().split('T')[0],
                 newPondShrimpCount: '',
+                newPondDevice: '',
 
+                // Biến Sổ Sách
+                electricityPrice: 2500, // Giá điện mặc định
+                totalKwhConsumed: 450.5, // Số điện tiêu thụ (Sẽ nhận từ ESP32/INA219)
+                financeTimeframe: 'Tháng',
+                showElectricityPriceModal: false,
+                tempElectricityPrice: '',
+                showEditTransactionModal: false,
+                editingTxnId: null,
+                editTxnCategory: '',
+                editTxnAmount: '',
+                editTxnType: 'chi',
+                editTxnNote: '',
+                showDeleteTxnModal: false,
+                deletingTxnId: null,
+                // ...
                 // Biến trạng thái Modal
                 showErrorModal: false, // Biến bật/tắt pop-up lỗi
                 errorMessage: '',      // Biến chứa nội dung lỗi
+
+                isFingerprintEnabled: false,
+
+                // Biến điều khiển Modal Pop-up
+                showFingerprintModal: false,
+                fingerprintStep: 'scanning', // Các trạng thái: 'scanning', 'success', 'error'
+                fingerprintTimer: null,
 
                 // Biến Sổ Sách
                 financeTimeframe: 'Tháng',
@@ -850,56 +1851,61 @@
                 financeCategory: 'Thức ăn',
                 financeDate: new Date().toISOString().split('T')[0],
                 financeNote: '',
-                transactions: [
-                    { id: 1, type: 'chi', amountFormatted: '5,000,000', amount: 5000000, category: 'Thức ăn', date: '2026-08-01', note: 'Mua cám' },
-                    { id: 2, type: 'chi', amountFormatted: '2,000,000', amount: 2000000, category: 'Tiền điện', date: '2026-08-05', note: 'Tháng 7' }
-                ],
+                // Du lieu THAT lay tu server (js/store.js). Truoc day day la
+                // mang cung trong file nay -> ai mo cung thay y het nhau.
+                transactions: [],
 
                 // Biến Nhật ký AI
-                aiLogs: [
-                    { id: 101, time: '08:30', date: '09/08/2026', content: 'Thả 5kg thức ăn số 2 vào Ao số 1', targetPond: 'Ao số 1' },
-                    { id: 102, time: '16:00', date: '08/08/2026', content: 'Hệ thống tự động bật quạt sục khí xử lý pH thấp ở Ao số 1', targetPond: 'Ao số 1' }
-                ],
+                aiLogs: [],
 
-                user: { name: 'Chú Ba', role: 'Trại trưởng', avatar: '' },
+                user: { name: '', role: '', avatar: '', phone: '' },
                 toasts: [],
                 alerts: [],
 
-                ponds: [
-                    { id: 'pond_01', name: 'Ao số 1', status: 'safe', temperature: 28.5, ph: 7.8, do: 5.8, fan: true, pump: false, stockingDate: '2026-05-15' },
-                    { id: 'pond_02', name: 'Ao số 2', status: 'safe', temperature: 28.2, ph: 7.6, do: 6.1, fan: true, pump: true, stockingDate: '2026-06-01' }
-                ],
+                ponds: [],
 
                 navItems: [
                     { id: 'dashboard', label: 'Tổng quan Ao', icon: 'layout-dashboard' },
                     { id: 'ai', label: 'Trợ lý AI', icon: 'bot' },
                     { id: 'logs', label: 'Sổ sách', icon: 'wallet' },
+                    { id: 'market', label: 'Thông tin thị trường', icon: 'store' },
                     { id: 'settings', label: 'Cài đặt', icon: 'settings' }
                 ],
                 mobileNavItems: [
                     { id: 'dashboard', label: 'TỔNG QUAN', icon: 'layout-dashboard' },
                     { id: 'ai', label: 'TRỢ LÝ AI', icon: 'bot' },
                     { id: 'logs', label: 'SỔ SÁCH', icon: 'wallet' },
+                    { id: 'market', label: 'THỊ TRƯỜNG', icon: 'store' },
                     { id: 'settings', label: 'CÀI ĐẶT', icon: 'settings' }
                 ],
 
                 get selectedPond() { return this.ponds.find(p => p.id === this.selectedPondId); },
 
-                initApp() {
-                    const savedUser = localStorage.getItem('currentUser');
-                    if (savedUser) {
-                        try {
-                            const parsed = JSON.parse(savedUser);
-                            this.user.name = parsed.name || this.user.name;
-                            this.user.role = parsed.role || this.user.role;
-                            this.user.avatar = parsed.avatar || ''; // Thêm dòng này để load ảnh
-                        } catch (e) { this.user.name = savedUser; }
+
+                async initApp() {
+                    // ===== LAY DU LIEU THAT TU SERVER =====
+                    // Chua dang nhap -> chuyen thang ve trang dang nhap.
+                    // Truoc day doc localStorage nen doi may la mat sach du lieu.
+                    const daDangNhap = await this.initStore();
+                    if (!daDangNhap) {
+                        if (!this.storeGuard()) return;      // chua dang nhap -> da chuyen trang
+                        // Con lai la truong hop MAT SERVER: van cho vao xem,
+                        // nhung giao dien se hien bang canh bao mat ket noi.
                     }
                     this.updateClock(); setInterval(() => this.updateClock(), 1000);
                     this.$nextTick(() => { lucide.createIcons(); this.initChart(); });
 
                     // ===== BAT DAU LAY DU LIEU THAT TU ESP32 =====
                     this.initIot();
+
+                    // ===== BAT DAU LAY GIA TOM THI TRUONG =====
+                    this.initMarket();
+
+                    // ===== MAY CHO AN TU DONG =====
+                    this.initFeed();
+
+                    // ===== TRO LY =====
+                    this.initAi();
                     // Ve lai icon sau moi lan du lieu IoT lam thay doi giao dien
                     setInterval(() => lucide.createIcons(), 2000);
 
@@ -913,22 +1919,36 @@
                     this.$watch('financeType', (val) => { this.financeCategory = val === 'chi' ? 'Thức ăn' : 'Bán tôm'; });
                 },
 
+
+
                 // ---- XỬ LÝ SỔ SÁCH ----
                 formatCurrency() {
                     let val = this.financeAmount.replace(/\D/g, '');
                     this.financeAmount = val !== '' ? new Intl.NumberFormat('vi-VN').format(val) : '';
                 },
-                saveTransaction() {
-                    if (!this.financeAmount || this.financeAmount === '0') { alert('Vui lòng nhập số tiền hợp lệ!'); return; }
-                    let rawAmount = parseInt(this.financeAmount.replace(/\D/g, ''));
-                    this.transactions.push({
-                        id: Date.now(),
-                        type: this.financeType, amount: rawAmount, amountFormatted: this.financeAmount,
-                        category: this.financeCategory, date: this.financeDate, note: this.financeNote
+                async saveTransaction() {
+                    const rawAmount = parseInt(String(this.financeAmount).replace(/\D/g, ''), 10);
+                    if (!rawAmount || rawAmount <= 0) {
+                        this.errorMessage = 'Vui lòng nhập số tiền hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    // Ghi vao DATABASE, khong phai vao mang trong trinh duyet.
+                    // Chi bao thanh cong khi server da nhan that.
+                    const xong = await this.storeAddTransaction({
+                        type: this.financeType,
+                        amount: rawAmount,
+                        category: this.financeCategory,
+                        date: this.financeDate,
+                        note: this.financeNote,
+                        pond_id: this.selectedPondId || null,
                     });
+                    if (!xong) return;
+
                     this.showToast(`Đã lưu giao dịch ${this.financeType === 'chi' ? 'Chi' : 'Thu'}!`, 'success');
                     this.financeAmount = ''; this.financeNote = '';
-                    this.$nextTick(() => lucide.createIcons());
+                    this.$nextTick(() => { this.initFinanceChart(); lucide.createIcons(); });
                 },
                 openFinanceModal() {
                     this.showFinanceModal = true;
@@ -947,7 +1967,89 @@
                 get totalExpense() {
                     return this.transactions.filter(t => t.type === 'chi').reduce((sum, t) => sum + t.amount, 0);
                 },
+                get totalElectricityCost() {
+                    return Math.round(this.totalKwhConsumed * this.electricityPrice);
+                },
+                calculateBalance() {
+                    return this.totalIncome - this.totalExpense - this.totalElectricityCost;
+                },
+                updateElectricityPrice() {
+                    this.tempElectricityPrice = this.electricityPrice;
+                    this.showElectricityPriceModal = true;
+                },
+                async saveElectricityPrice() {
+                    if (this.tempElectricityPrice && this.tempElectricityPrice > 0) {
+                        this.electricityPrice = parseInt(this.tempElectricityPrice);
+                        await this.storeSaveSettings({ electricity_price: this.electricityPrice });
+                        this.showElectricityPriceModal = false;
+                        this.showToast('Cập nhật giá điện thành công!', 'success');
+                        this.$nextTick(() => { this.initFinanceChart(); });
+                    } else {
+                        this.showToast('Vui lòng nhập giá điện hợp lệ!', 'error');
+                    }
+                },
+
+                // === LOGIC SỬA GIAO DỊCH ===
+                openEditTransaction(txn) {
+                    this.editingTxnId = txn.id;
+                    this.editTxnCategory = txn.category;
+                    this.editTxnAmount = txn.amountFormatted;
+                    this.editTxnType = txn.type;
+                    this.editTxnNote = txn.note || '';
+                    this.showEditTransactionModal = true;
+                    this.$nextTick(() => lucide.createIcons());
+                },
+                formatEditCurrency() {
+                    let val = String(this.editTxnAmount).replace(/\D/g, '');
+                    this.editTxnAmount = val !== '' ? new Intl.NumberFormat('vi-VN').format(val) : '';
+                },
+                async saveEditedTransaction() {
+                    let rawAmount = parseInt(String(this.editTxnAmount).replace(/\D/g, ''));
+                    if (!rawAmount || rawAmount <= 0) {
+                        this.errorMessage = 'Vui lòng nhập số tiền hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    const xong = await this.storeUpdateTransaction(this.editingTxnId, {
+                        category: this.editTxnCategory,
+                        amount: rawAmount,
+                        type: this.editTxnType,
+                        note: this.editTxnNote,
+                    });
+                    if (!xong) return;
+
+                    this.showEditTransactionModal = false;
+                    this.showToast('Đã cập nhật lại giao dịch!', 'success');
+
+                    // Vẽ lại biểu đồ vì số tiền vừa bị thay đổi
+                    this.$nextTick(() => { this.initFinanceChart(); lucide.createIcons(); });
+                },
+
+                // Mở pop-up xác nhận xóa
+                promptDeleteTransaction(id) {
+                    this.deletingTxnId = id;
+                    this.showDeleteTxnModal = true;
+                },
+
+                // Thực thi việc xóa dữ liệu
+                async executeDeleteTransaction() {
+                    const xong = await this.storeDeleteTransaction(this.deletingTxnId);
+                    if (!xong) return;
+
+                    this.showDeleteTxnModal = false;
+                    this.deletingTxnId = null;
+                    this.showToast('Đã xóa giao dịch thành công!', 'success');
+
+                    // Cập nhật lại biểu đồ và Icon
+                    this.$nextTick(() => {
+                        this.initFinanceChart();
+                        lucide.createIcons();
+                    });
+                },
+
                 formatNumber(num) {
+
                     return new Intl.NumberFormat('vi-VN').format(num);
                 },
                 // --- KẾT THÚC PHẦN THÊM ---
@@ -965,6 +2067,13 @@
                         let note = t.note || '';
                         csvContent += `${date},${type},${t.category},${amount},${note}\n`;
                     });
+
+                    csvContent += `\n,,,,\n`;
+                    csvContent += `TỔNG KẾT,,,,\n`;
+                    csvContent += `Tổng thu (A),,,${this.totalIncome} đ,\n`;
+                    csvContent += `Tổng chi phí thủ công (B),,,${this.totalExpense} đ,\n`;
+                    csvContent += `Tiền điện tự động (C),,,${this.totalElectricityCost} đ,${this.totalKwhConsumed} kWh x ${this.electricityPrice}đ\n`;
+                    csvContent += `TỔNG SỐ DƯ (A - B - C),,,${this.calculateBalance()} đ,\n`;
 
                     let timeString = '';
                     let currentD = new Date();
@@ -1005,53 +2114,47 @@
                     reader.readAsDataURL(file);
                 },
 
-                saveProfile() {
+                async saveProfile() {
                     if (this.editName.trim() === '') {
                         this.errorMessage = 'Vui lòng không để trống tên nhé!';
                         this.showErrorModal = true;
                         return;
                     }
 
-                    // Cập nhật dữ liệu mới lên giao diện
-                    this.user.name = this.editName;
-                    this.user.avatar = this.editAvatar;
-
-                    // Giữ lại các thông tin cũ (như Số điện thoại, Vai trò) và chỉ đè Tên/Ảnh mới lên
-                    let currentData = {};
-                    try {
-                        currentData = JSON.parse(localStorage.getItem('currentUser')) || {};
-                    } catch (e) { }
-
-                    currentData.name = this.user.name;
-                    currentData.avatar = this.user.avatar;
-
-                    // Lưu vào bộ nhớ máy để tải lại trang không bị mất
-                    localStorage.setItem('currentUser', JSON.stringify(currentData));
+                    // Luu len SERVER. Dang nhap tu dien thoai khac cung thay
+                    // ten va anh moi - truoc day chi doi tren dung may nay.
+                    const xong = await this.storeSaveProfile({
+                        name: this.editName,
+                        avatar: this.editAvatar,
+                    });
+                    if (!xong) return;
 
                     this.showEditProfileModal = false;
                     this.showToast('Đã cập nhật hồ sơ thành công!', 'success');
                     this.$nextTick(() => lucide.createIcons());
                 },
                 // ---- XỬ LÝ AI & NHẬT KÝ ----
+                // Ban cu chi nhan ra dung "ao 1" va "ao 2" bang cach do chuoi:
+                //     text.includes("ao 1") -> "Ao so 1"
+                // Ten ao nao khac deu roi vao "He thong chung".
+                // Gio doi chieu voi TEN AO THAT trong database (js/ai.js), va hien
+                // cho nguoi dung xac nhan truoc khi ghi - khong ghi nham ao nua.
                 submitAILog(text) {
-                    if (!text || text.trim() === '') return;
-                    const now = new Date();
-                    let detectedPondName = "Hệ thống chung";
-                    if (text.toLowerCase().includes("ao 1") || text.toLowerCase().includes("ao số 1")) detectedPondName = "Ao số 1";
-                    else if (text.toLowerCase().includes("ao 2") || text.toLowerCase().includes("ao số 2")) detectedPondName = "Ao số 2";
-
-                    this.aiLogs.unshift({
-                        id: Date.now(),
-                        time: now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                        date: now.toLocaleDateString('vi-VN'),
-                        content: text, targetPond: detectedPondName
-                    });
-
-                    this.showToast('Ghi nhận vào Nhật ký thành công!');
-                    this.aiTextInput = ''; this.voiceResult = ''; this.currentView = 'dashboard';
+                    if (!text || String(text).trim() === '') return;
+                    this.ai.nhap = String(text).trim();
+                    this.currentView = 'ai';
+                    this.ai.cheDo = 'ghi';
+                    this.aiPhanLoai(this.ai.nhap);
                 },
-                getPondLogs(pondName) {
-                    return this.aiLogs.filter(log => log.targetPond === pondName || log.targetPond === "Hệ thống chung");
+
+                // Nhat ky cua 1 ao. Truoc day loc theo TEN ao (chuoi chu) nen doi
+                // ten ao la mat het nhat ky cu. Gio loc theo pond_id.
+                getPondLogs(pondNameHoacId) {
+                    const p = (this.ponds || []).find(
+                        x => x.pond_id === pondNameHoacId || x.name === pondNameHoacId
+                    );
+                    const id = p ? p.pond_id : (this.selectedPondId || null);
+                    return (this.aiLogs || []).filter(l => l.pond_id === id || !l.pond_id);
                 },
 
                 // ---- CÁC HÀM CŨ ĐÃ CÓ ----
@@ -1072,10 +2175,15 @@
                     }
                 },
 
-                addNewPond() {
+                async addNewPond() {
                     // Thay thế alert() bằng Modal
                     if (this.newPondName.trim() === '') {
                         this.errorMessage = 'Vui lòng nhập tên ao!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+                    if (!this.newPondArea || this.newPondArea <= 0) {
+                        this.errorMessage = 'Vui lòng nhập diện tích ao nuôi hợp lệ!';
                         this.showErrorModal = true;
                         return;
                     }
@@ -1092,36 +2200,83 @@
                         return;
                     }
 
-                    // (Phần logic thêm ao phía dưới giữ nguyên)
-                    const newId = 'pond_' + Date.now();
-                    this.ponds.push({
-                        id: newId,
+                    // Ghi vao DATABASE tren server.
+                    // Ban cu day thang vao mang this.ponds kem so cam bien BIA
+                    // (28.0 C, pH 7.5, DO 6.0) - nhin nhu ao dang hoat dong
+                    // trong khi chua he co thiet bi nao do. Gio de trong,
+                    // co thiet bi that gui len thi moi co so.
+                    const ao = await this.storeAddPond({
                         name: this.newPondName,
-                        seed: this.newPondSeed,
-                        status: 'safe',
-                        temperature: 28.0,
-                        ph: 7.5,
-                        do: 6.0,
-                        fan: false,
-                        pump: false,
-                        stockingDate: this.newPondDate,
-                        shrimpCount: this.newPondShrimpCount
+                        area_m2: this.newPondArea,
+                        seed_type: this.newPondSeed,
+                        seed_count: this.newPondShrimpCount,
+                        stocking_date: this.newPondDate,
+                        device_id: this.newPondDevice || null,
                     });
+                    if (!ao) return;          // loi da bao qua toast
 
                     this.showAddPondModal = false;
                     this.newPondName = '';
                     this.newPondSeed = '';
                     this.newPondShrimpCount = '';
+                    this.newPondArea = '';
+                    this.newPondDevice = '';
 
-                    this.showToast('Đã thêm ao nuôi mới thành công!', 'success');
                     this.$nextTick(() => lucide.createIcons());
                 },
 
-                confirmDeletePond() {
-                    this.ponds = this.ponds.filter(p => p.id !== this.selectedPondId);
-                    this.selectedPondId = null; this.showDeleteConfirmModal = false; this.showToast('Đã xóa ao thành công!');
+                // Hàm mở Modal và chọn sẵn Ao đầu tiên
+                openFeedModal() {
+                    this.feedPondId = this.ponds.length > 0 ? this.ponds[0].id : '';
+                    this.feedAmount = '';
+                    this.feedAlertThreshold = '';
+                    this.showFeedModal = true;
+                    this.$nextTick(() => lucide.createIcons());
                 },
-                confirmLogout() { localStorage.removeItem('currentUser'); window.location.href = 'index.html'; },
+
+                // Hàm Xác nhận lưu dữ liệu nạp thức ăn
+                confirmFeed() {
+                    if (!this.feedPondId) {
+                        this.errorMessage = 'Vui lòng chọn ao để nạp thức ăn!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+                    if (!this.feedAmount || this.feedAmount <= 0) {
+                        this.errorMessage = 'Vui lòng nhập số kg thức ăn hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+                    if (!this.feedAlertThreshold || this.feedAlertThreshold <= 0) {
+                        this.errorMessage = 'Vui lòng thiết lập ngưỡng cảnh báo hợp lệ!';
+                        this.showErrorModal = true;
+                        return;
+                    }
+
+                    // Tìm tên ao để hiển thị thông báo
+                    const targetPond = this.ponds.find(p => p.id === this.feedPondId);
+                    const pondName = targetPond ? targetPond.name : 'Hệ thống';
+
+                    // Tự động Ghi nhật ký nuôi tôm
+                    this.aiLogs.unshift({
+                        id: Date.now(),
+                        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+                        date: new Date().toLocaleDateString('vi-VN'),
+                        content: `Nạp ${this.feedAmount}kg thức ăn. Đặt ngưỡng AI theo dõi: ${this.feedAlertThreshold} con/kg.`,
+                        targetPond: pondName
+                    });
+
+                    // Đóng Modal và báo thành công
+                    this.showFeedModal = false;
+                    this.showToast(`Đã nạp thành công ${this.feedAmount}kg cám vào ${pondName}!`, 'success');
+                },
+
+                async confirmDeletePond() {
+                    const xong = await this.storeDeletePond(this.selectedPondId);
+                    if (!xong) return;
+                    this.selectedPondId = null;
+                    this.showDeleteConfirmModal = false;
+                },
+                async confirmLogout() { await this.storeLogout(); },
                 formatDate(dateStr) {
                     if (!dateStr) return 'Chưa có thông tin';
                     const parts = dateStr.split('-');
@@ -1144,7 +2299,8 @@
                         'layout-dashboard': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>`,
                         'bot': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`,
                         'wallet': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>`,
-                        'settings': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`
+                        'settings': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`,
+                        'store': `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>`
                     };
                     return icons[name] || '';
                 },
@@ -1223,15 +2379,17 @@
                         }
                     }, 1000);
                 },
-                startVoiceInput() { this.currentView = 'ai'; this.selectedPondId = null; this.toggleRecording(); },
-                toggleRecording() {
-                    if (this.isRecording) {
-                        this.isRecording = false; this.voiceResult = "Cho ao số 1 ăn 5 ký thức ăn.";
-                    } else {
-                        this.isRecording = true; this.voiceResult = "";
-                        setTimeout(() => { if (this.isRecording) this.toggleRecording(); }, 3000);
-                    }
+                startVoiceInput() {
+                    this.currentView = 'ai';
+                    this.selectedPondId = null;
+                    this.ai.cheDo = 'ghi';
+                    this.$nextTick(() => this.aiBatMicro());
                 },
+
+                // Ban cu cua ham nay KHONG dung micro: no chi doi 3 giay roi tra ve
+                // cau cung "Cho ao so 1 an 5 ky thuc an." - noi gi cung ra cau do.
+                // Gio chuyen sang micro THAT trong js/ai.js (Web Speech API, vi-VN).
+                toggleRecording() { this.aiBatMicro(); },
                 showToast(message, type = 'success') {
                     const id = Date.now(); this.toasts.push({ id, message, type, visible: true });
                     setTimeout(() => { const toast = this.toasts.find(t => t.id === id); if (toast) toast.visible = false; }, 3000);
@@ -1241,7 +2399,7 @@
                 initFinanceChart() {
                     const ctx = document.getElementById('financePieChart');
                     if (!ctx) return;
-                    
+
 
                     // 1. Lọc giao dịch CHI theo Timeframe
                     let filteredTxns = this.transactions.filter(t => t.type === 'chi');
@@ -1267,6 +2425,9 @@
                     filteredTxns.forEach(t => {
                         categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
                     });
+
+                    // categoryTotals['Tiền điện (Auto)'] = this.totalElectricityCost;
+
 
                     // 3. Chuẩn bị dữ liệu cho Chart.js
                     const labels = Object.keys(categoryTotals);
@@ -1311,7 +2472,7 @@
 
                 async initChart() {
                     const ctx = document.getElementById('envChart'); if (!ctx) return;
-                    
+
                     Chart.defaults.font.family = "'Inter', sans-serif"; Chart.defaults.color = '#64748b';
 
                     // ===== DU LIEU MAC DINH (khi chua ao nao gan ESP32) =====
@@ -1336,7 +2497,7 @@
                 },
                 async initDetailChart() {
                     const ctx = document.getElementById('pondDetailChart'); if (!ctx) return;
-                    
+
 
                     // ===== DU LIEU MAC DINH (ao demo chua gan ESP32) =====
                     let labels = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Bây giờ'];
@@ -1371,6 +2532,45 @@
                     if (!pond) return;                     // chua ao nao gan ESP32 -> giu bieu do demo
                     const data = await this.iotChartData(pond.id, '1d');
                     this.iotApplyChartData(this.iotGetChart('overview'), data);
+                },
+
+                toggleFingerprint() {
+                    if (!this.isFingerprintEnabled) {
+                        // BƯỚC 1: MỞ POP-UP YÊU CẦU QUÉT
+                        this.fingerprintStep = 'scanning';
+                        this.showFingerprintModal = true;
+
+                        // Vẽ lại icon vì vừa hiện pop-up mới
+                        this.$nextTick(() => lucide.createIcons());
+
+                        // BƯỚC 2: GIẢ LẬP QUÁ TRÌNH QUÉT TRONG 2 GIÂY
+                        this.fingerprintTimer = setTimeout(() => {
+                            this.fingerprintStep = 'success';
+                            this.isFingerprintEnabled = true; // Bật nút gạt thành màu xanh
+                            this.$nextTick(() => lucide.createIcons());
+
+                            // Tự động đóng Pop-up sau 1.5 giây nếu thành công
+                            setTimeout(() => {
+                                if (this.showFingerprintModal) {
+                                    this.showFingerprintModal = false;
+                                    this.showToast('Đã thiết lập đăng nhập bằng vân tay!', 'success');
+                                }
+                            }, 1500);
+
+                        }, 2000);
+
+                    } else {
+                        // NẾU ĐANG BẬT THÌ TẮT (Không cần pop-up)
+                        this.isFingerprintEnabled = false;
+                        this.showToast('Đã tắt tính năng đăng nhập bằng vân tay.', 'info');
+                    }
+                },
+
+                // Hàm xử lý nếu người dùng bấm "Hủy bỏ" giữa chừng
+                cancelFingerprint() {
+                    clearTimeout(this.fingerprintTimer); // Dừng giả lập quét
+                    this.showFingerprintModal = false;   // Đóng pop-up
+                    this.isFingerprintEnabled = false;   // Nút gạt vẫn tắt
                 }
             }
         }
