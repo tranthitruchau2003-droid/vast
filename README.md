@@ -21,22 +21,41 @@ ESP32 đo môi trường nước và tự điều khiển thiết bị, website 
 ## Cấu trúc thư mục
 
 ```
-vietnamaismart/
-├── index.html, login.html, register.html   Trang giới thiệu và đăng nhập
-├── dashboard.html                          Màn hình chính (Alpine.js)
-├── components/                             Các khối giao diện nạp động (HTMX)
-├── js/
-│   ├── iot.js                              Kết nối ESP32: realtime, gửi lệnh, biểu đồ
-│   └── vast-config.js                      Cấu hình phía web
-├── server/                                 Backend Node.js (KHÔNG cần npm install)
-│   ├── server.js                           HTTP server + phục vụ web
-│   ├── api.js                              Toàn bộ API IoT
-│   ├── db.js                               SQLite (tự fallback JSON nếu Node cũ)
-│   ├── seed.js                             Đăng ký thiết bị, sinh device_token
-│   └── simulate_esp32.js                   Giả lập ESP32 khi chưa có mạch
-├── esp32/
+vast/
+├── web/                    GIAO DIỆN — mọi thứ trình duyệt tải về
+│   ├── index.html, login.html, register.html
+│   ├── dashboard.html                      Màn hình chính (Alpine.js)
+│   ├── trace.html                          Trang công khai cho người quét mã QR
+│   ├── components/                         Các khối giao diện nạp động (HTMX)
+│   ├── js/                                 iot, market, feed, store, ai
+│   └── assets/                             logo, icon
+│
+├── server/                 BACKEND Node.js (KHÔNG cần npm install)
+│   ├── index.js                            Điểm khởi chạy: HTTP server + phục vụ web
+│   ├── config.js                           Cấu hình + giá trị mặc định
+│   ├── routes/api.js                       Toàn bộ endpoint HTTP
+│   ├── services/                           Phần nghiệp vụ, không dính HTTP
+│   │   ├── feed.js                         Công thức khẩu phần (N → B → F)
+│   │   ├── harvest.js                      Cố vấn thu hoạch: bán ngay hay nuôi thêm
+│   │   ├── kb.js                           Kho kiến thức nuôi tôm (3 loài)
+│   │   ├── ask.js, advisor.js              Trợ lý và cố vấn dựa trên luật
+│   │   ├── market.js, market_source.js     Giá tôm, giá vật tư
+│   │   └── trace.js                        Hồ sơ truy xuất nguồn gốc
+│   ├── lib/                                Hạ tầng dùng chung
+│   │   ├── db.js                           SQLite (tự lui về JSON nếu Node cũ)
+│   │   ├── auth.js                         Tài khoản, phiên đăng nhập
+│   │   └── qr.js                           Tự sinh mã QR, không cần mạng
+│   ├── tools/                              Chạy tay khi cần
+│   │   ├── seed.js                         Đăng ký thiết bị, sinh device_token
+│   │   └── simulate_esp32.js               Giả lập ESP32 khi chưa có mạch
+│   └── data/                               Database (đã bị .gitignore chặn)
+│
+├── firmware/               MÃ NẠP VÀO ESP32
 │   ├── esp32_vast/                         Firmware chính
 │   └── esp32_i2c_scan/                     Công cụ chẩn đoán INA219
+│
+├── docs/                   Tài liệu kỹ thuật
+│
 ├── CHAY_SERVER.bat                         Nhảy đúp để chạy (Windows)
 └── CHAY_GIA_LAP_ESP32.bat                  Giả lập ESP32
 ```
@@ -63,8 +82,8 @@ Cần cài sẵn [Node.js](https://nodejs.org) bản LTS.
 
 ```bash
 cd server
-node seed.js      # chỉ lần đầu — copy device_token in ra
-node server.js
+node tools/seed.js      # chỉ lần đầu — copy device_token in ra
+node index.js
 ```
 
 Mở http://localhost:3000/dashboard.html
@@ -73,7 +92,7 @@ Mở http://localhost:3000/dashboard.html
 
 ```bash
 cd server
-node simulate_esp32.js
+node tools/simulate_esp32.js
 ```
 
 Phím `q`/`a` giảm/tăng DO, `w`/`s` giảm/tăng nhiệt độ. Trên web sẽ thấy số nhảy và cảnh báo hiện ra y như thiết bị thật.
@@ -90,7 +109,7 @@ Board: **ESP32 Dev Module** · Serial Monitor: **115200**
 **Bước bắt buộc trước khi nạp** — tạo file cấu hình riêng của bạn:
 
 ```bash
-cd esp32/esp32_vast
+cd firmware/esp32_vast
 copy config.example.h config.h        # Windows
 cp config.example.h config.h          # macOS / Linux
 ```
@@ -101,7 +120,7 @@ Rồi mở `config.h` điền 4 dòng:
 #define WIFI_SSID       "tên wifi của bạn"
 #define WIFI_PASSWORD   "mật khẩu wifi"
 #define SERVER_URL      "http://192.168.1.10:3000"   // IP máy chạy server, chạy ipconfig để xem
-#define DEVICE_TOKEN    "token từ lệnh node seed.js"
+#define DEVICE_TOKEN    "token từ lệnh node tools/seed.js"
 ```
 
 > **`config.h` đã được `.gitignore` chặn lại — mật khẩu của bạn không bao giờ bị đẩy lên GitHub. Đừng bao giờ xoá dòng đó khỏi `.gitignore`.**
@@ -166,9 +185,9 @@ Lệnh hỗ trợ: `SET_MODE` (AUTO/MANUAL) · `SET_PUMP` · `SET_AERATOR`.
 
 **Không bịa số liệu.** Cảm biến pH chưa gắn thì gửi `null` và hiển thị "Chưa kết nối cảm biến", không hiện số giả.
 
-**Không đặt đối tượng Chart.js vào dữ liệu Alpine.** Alpine bọc Proxy làm Chart.js không vẽ lại được. Biểu đồ giữ trong `js/iot.js`, truy cập qua `iotGetChart()`.
+**Không đặt đối tượng Chart.js vào dữ liệu Alpine.** Alpine bọc Proxy làm Chart.js không vẽ lại được. Biểu đồ giữ trong `web/js/iot.js`, truy cập qua `iotGetChart()`.
 
-**Sửa `js/iot.js` thì phải tăng số `?v=` trong `dashboard.html`**, nếu không trình duyệt sẽ dùng bản cũ trong bộ nhớ đệm.
+**Sửa file trong `web/js/` thì phải tăng số `?v=` trong `web/dashboard.html`**, nếu không trình duyệt sẽ dùng bản cũ trong bộ nhớ đệm.
 
 ---
 
@@ -179,7 +198,7 @@ Lệnh hỗ trợ: `SET_MODE` (AUTO/MANUAL) · `SET_PUMP` · `SET_AERATOR`.
 - **Chạy offline**: hiện web tải Tailwind/Alpine/Chart.js từ CDN nên cần Internet. Nên tải về thư mục `vendor/`.
 - **Bảo mật**: hiện dùng HTTP trong mạng LAN, phù hợp demo. Nếu mở ra Internet cần HTTPS và xác thực người dùng thật phía server (hiện đăng nhập mới chỉ lưu localStorage).
 
-Tài liệu kỹ thuật đầy đủ: [`HUONG_DAN_TICH_HOP_ESP32.md`](HUONG_DAN_TICH_HOP_ESP32.md)
+Tài liệu kỹ thuật đầy đủ: [`docs/HUONG_DAN_TICH_HOP_ESP32.md`](docs/HUONG_DAN_TICH_HOP_ESP32.md)
 
 ---
 

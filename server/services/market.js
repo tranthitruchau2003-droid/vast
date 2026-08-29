@@ -16,8 +16,8 @@
 'use strict';
 
 const path = require('path');
-const db = require('./db');
-const config = require('./config');
+const db = require('../lib/db');
+const config = require('../config');
 const { fetchPrices, fetchSupplies, _internals } = require('./market_source');
 const { classify } = _internals;
 
@@ -118,7 +118,7 @@ async function layGiaVatTu(opts = {}) {
     if (MK.suppliesEnabled === false) return;
     try {
         const res = await fetchSupplies(MK, {
-            debugFile: opts.debug ? path.join(__dirname, 'data', 'market_supply_debug.html') : null,
+            debugFile: opts.debug ? path.join(__dirname, '..', 'data', 'market_supply_debug.html') : null,
         });
         let n = 0;
         for (const it of res.items) {
@@ -189,7 +189,7 @@ async function refresh(opts = {}) {
 
     try {
         const res = await fetchPrices(MK, {
-            debugFile: opts.debug ? path.join(__dirname, 'data', 'market_debug.html') : null,
+            debugFile: opts.debug ? path.join(__dirname, '..', 'data', 'market_debug.html') : null,
         });
 
         const day = today();

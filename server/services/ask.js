@@ -23,7 +23,7 @@
 
 'use strict';
 
-const db = require('./db');
+const db = require('../lib/db');
 const advisor = require('./advisor');
 const kb = require('./kb');
 

@@ -18,8 +18,8 @@
 // LUU Y: day CHI la cong cu test. Khi cam ESP32 that thi tat script nay di.
 // ================================================================
 
-const db = require('./db');
-const config = require('./config');
+const db = require('../lib/db');
+const config = require('../config');
 
 const DEVICE_ID = process.argv[2] || 'ESP32_POND_01';
 const BASE = `http://localhost:${config.port}`;

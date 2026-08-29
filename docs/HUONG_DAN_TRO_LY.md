@@ -43,7 +43,7 @@ thay vì câu chung chung ai cũng nói được:
 
 Mỗi lời khuyên đều kèm trường **`can_cu`** ghi rõ con số nào dẫn tới kết luận đó — bạn kiểm được, không phải tin suông. Giao diện gọi đúng tên nó là *"Cố vấn dựa trên số liệu thật của ao"*, không dán nhãn "AI thông minh".
 
-Sau này bạn có khóa API thì chỗ cắm đã chừa sẵn trong `server/ask.js`.
+Sau này bạn có khóa API thì chỗ cắm đã chừa sẵn trong `server/services/ask.js`.
 
 ---
 
@@ -187,12 +187,12 @@ Từng loại lỗi được báo riêng, không gộp thành một câu chung: 
 
 | File | |
 |---|---|
-| `server/advisor.js` | **Mới** — 6 nhóm luật cố vấn, mùa vụ ĐBSCL, điều kiện 4 bệnh |
-| `server/ask.js` | **Mới** — hiểu câu tiếng Việt, phân loại nhật ký, trả lời câu hỏi |
-| `js/ai.js` | **Mới** — micro thật, xác nhận trước khi ghi, hiển thị cố vấn |
-| `components/view_ai.html` | Viết lại: việc cần làm ngay, ghi nhật ký, hỏi đáp, nhật ký từng ao |
-| `server/api.js` | Thêm `/api/advisor`, `/api/ask`, `/api/logs/classify` |
-| `dashboard.html` | Nạp `js/ai.js`, bỏ micro giả, sửa `getPondLogs` lọc theo `pond_id` |
+| `server/services/advisor.js` | **Mới** — 6 nhóm luật cố vấn, mùa vụ ĐBSCL, điều kiện 4 bệnh |
+| `server/services/ask.js` | **Mới** — hiểu câu tiếng Việt, phân loại nhật ký, trả lời câu hỏi |
+| `web/js/ai.js` | **Mới** — micro thật, xác nhận trước khi ghi, hiển thị cố vấn |
+| `web/components/view_ai.html` | Viết lại: việc cần làm ngay, ghi nhật ký, hỏi đáp, nhật ký từng ao |
+| `server/routes/api.js` | Thêm `/api/advisor`, `/api/ask`, `/api/logs/classify` |
+| `dashboard.html` | Nạp `web/js/ai.js`, bỏ micro giả, sửa `getPondLogs` lọc theo `pond_id` |
 
 Còn một lỗi nhỏ đã sửa luôn: `getPondLogs()` cũ lọc nhật ký theo **tên ao** — đổi tên ao là mất hết nhật ký cũ. Giờ lọc theo `pond_id`.
 

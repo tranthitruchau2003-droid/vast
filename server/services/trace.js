@@ -41,8 +41,8 @@
 'use strict';
 
 const crypto = require('crypto');
-const db = require('./db');
-const config = require('./config');
+const db = require('../lib/db');
+const config = require('../config');
 
 const TR = config.trace || {};
 

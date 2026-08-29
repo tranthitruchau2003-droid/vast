@@ -21,7 +21,7 @@ echo    VAST - GIA LAP ESP32
 echo  ==============================================================
 echo.
 
-if not exist "%THUMUC%\simulate_esp32.js" (
+if not exist "%THUMUC%\tools\simulate_esp32.js" (
     color 0C
     echo   [LOI] Khong tim thay simulate_esp32.js
     echo   Dang tim o: %THUMUC%
@@ -65,7 +65,7 @@ echo.
 echo  ==============================================================
 echo.
 
-node simulate_esp32.js
+node tools\simulate_esp32.js
 
 echo.
 color 0E

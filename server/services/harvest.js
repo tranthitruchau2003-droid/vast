@@ -31,7 +31,7 @@
 
 'use strict';
 
-const db = require('./db');
+const db = require('../lib/db');
 const feed = require('./feed');
 const kb = require('./kb');
 

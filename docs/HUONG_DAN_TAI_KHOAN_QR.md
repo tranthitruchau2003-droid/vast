@@ -12,7 +12,7 @@ Ba việc trong lần này:
 
 ```bash
 cd server
-node server.js
+node index.js
 ```
 
 Mở `http://localhost:3000/register.html` → tạo tài khoản → tự vào dashboard.

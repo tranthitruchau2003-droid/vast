@@ -22,7 +22,7 @@
 //       Dang ky them thiet bi khac.
 //
 //   node seed.js --token c0723afd...
-//       Dat DUNG token ban dang co trong esp32/esp32_vast/config.h.
+//       Dat DUNG token ban dang co trong firmware/esp32_vast/config.h.
 //       Dung khi database bi tao lai ma khong muon nap lai code ESP32.
 //
 //   node seed.js --id ESP32_POND_01 --moi-token
@@ -34,7 +34,7 @@
 'use strict';
 
 const crypto = require('crypto');
-const db = require('./db');
+const db = require('../lib/db');
 
 // ----------------------------------------------------------------
 // DOC THAM SO DONG LENH
@@ -82,7 +82,7 @@ if (chayTrucTiep && co('list')) {
         console.log(`  lan cuoi thay: ${d.last_seen || 'CHUA BAO GIO - ESP32 chua goi duoc len'}`);
         console.log('');
     }
-    console.log('  So sanh device_id va token o tren voi esp32/esp32_vast/config.h.');
+    console.log('  So sanh device_id va token o tren voi firmware/esp32_vast/config.h.');
     console.log('  Lech mot ky tu la ESP32 bi tu choi.');
     console.log('');
     process.exit(0);
@@ -135,7 +135,7 @@ console.log('');
 
 if (doiToken) {
     console.log('  !! TOKEN DA THAY DOI.');
-    console.log('     Chep 3 dong tren vao  esp32/esp32_vast/config.h');
+    console.log('     Chep 3 dong tren vao  firmware/esp32_vast/config.h');
     console.log('     roi NAP LAI code vao ESP32. Khong nap lai thi ESP32');
     console.log('     van gui token cu va bi may chu tu choi.');
 } else if (tuDuaToken) {
@@ -169,11 +169,12 @@ const fs = require('fs');
 const pathMod = require('path');
 
 /**
- * Doc DEVICE_ID / POND_ID / DEVICE_TOKEN tu esp32/esp32_vast/config.h
+ * Doc DEVICE_ID / POND_ID / DEVICE_TOKEN tu firmware/esp32_vast/config.h
  * @returns {{device_id:string, pond_id:string, device_token:string}|null}
  */
 function docConfigH(duongDan) {
-    const f = duongDan || pathMod.join(__dirname, '..', 'esp32', 'esp32_vast', 'config.h');
+    // seed.js nam trong server/tools/ , firmware nam ngang hang voi server/
+    const f = duongDan || pathMod.join(__dirname, '..', '..', 'firmware', 'esp32_vast', 'config.h');
     let txt;
     try { txt = fs.readFileSync(f, 'utf8'); } catch { return null; }
 
@@ -197,7 +198,7 @@ function docConfigH(duongDan) {
  */
 function tuDongDongBo() {
     const cfg = docConfigH();
-    if (!cfg) return { hanhDong: 'khong_doc_duoc', chiTiet: 'Khong doc duoc esp32/esp32_vast/config.h' };
+    if (!cfg) return { hanhDong: 'khong_doc_duoc', chiTiet: 'Khong doc duoc firmware/esp32_vast/config.h' };
 
     const daCo = db.getDevice(cfg.device_id);
 

@@ -18,9 +18,9 @@ echo.
 REM ---------------------------------------------------------------
 REM  1) Kiem tra thu muc server co dung khong
 REM ---------------------------------------------------------------
-if not exist "%THUMUC%\server.js" (
+if not exist "%THUMUC%\index.js" (
     color 0C
-    echo   [LOI] Khong tim thay file server.js
+    echo   [LOI] Khong tim thay file index.js
     echo.
     echo   Dang tim o: %THUMUC%
     echo.
@@ -59,7 +59,7 @@ if not exist "data\vast.db" (
         echo   Database      : chua co, dang tao moi...
         echo.
         echo  --------------------------------------------------------------
-        node seed.js
+        node tools\seed.js
         echo  --------------------------------------------------------------
         echo.
         echo   ^>^> NHO copy device_token o tren vao file:
@@ -101,7 +101,7 @@ echo.
 REM ---------------------------------------------------------------
 REM  6) Chay server
 REM ---------------------------------------------------------------
-node server.js
+node index.js
 
 REM ---------------------------------------------------------------
 REM  7) Neu server thoat (loi hoac bam Ctrl+C) thi giu cua so lai

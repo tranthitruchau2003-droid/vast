@@ -23,17 +23,17 @@
 
 const crypto = require('crypto');
 const os = require('os');
-const db = require('./db');
-const config = require('./config');
-const market = require('./market');
-const feed = require('./feed');
-const auth = require('./auth');
-const trace = require('./trace');
-const advisor = require('./advisor');
-const ask = require('./ask');
-const qr = require('./qr');
-const kb = require('./kb');
-const harvest = require('./harvest');
+const db = require('../lib/db');
+const config = require('../config');
+const market = require('../services/market');
+const feed = require('../services/feed');
+const auth = require('../lib/auth');
+const trace = require('../services/trace');
+const advisor = require('../services/advisor');
+const ask = require('../services/ask');
+const qr = require('../lib/qr');
+const kb = require('../services/kb');
+const harvest = require('../services/harvest');
 
 // ----------------------------------------------------------------
 // TIEN ICH

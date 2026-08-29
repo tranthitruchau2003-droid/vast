@@ -21,11 +21,14 @@ const path = require('path');
 const { URL } = require('url');
 
 const config = require('./config');
-const db = require('./db');
-const market = require('./market');
-const { handlers, matchDynamic, handleDynamic, send } = require('./api');
+const db = require('./lib/db');
+const market = require('./services/market');
+const { handlers, matchDynamic, handleDynamic, send } = require('./routes/api');
 
-const WEB_ROOT = path.resolve(__dirname, '..');   // thu muc chua index.html, dashboard.html...
+// Thu muc goc cua phan web (index.html, dashboard.html, js/, components/...).
+// Nam o  web/  ngang hang voi  server/ , KHONG phai thu muc cha - de
+// may chu tinh khong the phuc vu nham file cua backend hay firmware.
+const WEB_ROOT = path.resolve(__dirname, '..', 'web');
 const PORT = config.port;
 
 const MIME = {
@@ -215,7 +218,7 @@ server.listen(PORT, '0.0.0.0', () => {
     // ra, khong tu sua - doan sai la ESP32 ngoai ao mat ket noi.
     // ============================================================
     try {
-        const r = require('./seed').tuDongDongBo();
+        const r = require('./tools/seed').tuDongDongBo();
         if (r.hanhDong === 'da_dang_ky') {
             console.log('[THIET BI] ' + r.chiTiet);
         } else if (r.hanhDong === 'lech_token') {

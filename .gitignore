@@ -4,8 +4,8 @@
 
 # ---- BAO MAT: chua mat khau Wi-Fi va device_token ----
 # Moi nguoi tu tao config.h rieng tu config.example.h
-esp32/esp32_vast/config.h
-esp32/**/config.h
+firmware/esp32_vast/config.h
+firmware/**/config.h
 
 # ---- Database va token cua server ----
 # Chay "node seed.js" la tu sinh lai, moi may mot token rieng

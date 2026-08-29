@@ -10,7 +10,7 @@ Không cần cài thêm gì (`npm install` vẫn không cần).
 
 ```bash
 cd server
-node server.js
+node index.js
 ```
 
 Mở `http://localhost:3000/dashboard.html` → tab **Thông tin thị trường**.
@@ -176,8 +176,8 @@ riêng, không liên quan, vẫn chạy bình thường.
 **Bật lại nếu sau này muốn:**
 
 1. `server/config.js` → `suppliesEnabled: true`
-2. Khôi phục khối HTML *"Giá Vật Tư Đầu Vào"* trong `components/view_market.html`,
-   modal trong `dashboard.html`, và các hàm `vt*` trong `js/market.js` (lấy từ git)
+2. Khôi phục khối HTML *"Giá Vật Tư Đầu Vào"* trong `web/components/view_market.html`,
+   modal trong `dashboard.html`, và các hàm `vt*` trong `web/js/market.js` (lấy từ git)
 
 ---
 
@@ -246,15 +246,15 @@ giá nhập tay còn nguyên, nguồn chết thì không xoá oan.
 
 | File | |
 |---|---|
-| `server/market_source.js` | **Mới** — đọc giá tôm + **giá vật tư**, 2 chiến lược dự phòng, chặn số vô lý |
-| `server/market.js` | **Mới** — lịch tự động, lưu database, giá nhập tay, bảng dự phòng |
-| `js/market.js` | **Mới** — module giao diện `marketModule()` |
-| `server/db.js` | Thêm 4 bảng `market_*` + bảng `market_supplies` (giá vật tư bạn nhập); mở SQLite thất bại thì tự chuyển sang file JSON thay vì chết cả máy chủ |
-| `server/api.js` | Thêm nhóm API `/api/market/*` |
+| `server/services/market_source.js` | **Mới** — đọc giá tôm + **giá vật tư**, 2 chiến lược dự phòng, chặn số vô lý |
+| `server/services/market.js` | **Mới** — lịch tự động, lưu database, giá nhập tay, bảng dự phòng |
+| `web/js/market.js` | **Mới** — module giao diện `marketModule()` |
+| `server/lib/db.js` | Thêm 4 bảng `market_*` + bảng `market_supplies` (giá vật tư bạn nhập); mở SQLite thất bại thì tự chuyển sang file JSON thay vì chết cả máy chủ |
+| `server/routes/api.js` | Thêm nhóm API `/api/market/*` |
 | `server/config.js` | Thêm mục `market` |
-| `server/server.js` | Gọi `market.start()` sau khi web lên |
-| `components/view_market.html` | Bảng giá + biểu đồ chạy bằng dữ liệu thật |
-| `dashboard.html` | Nạp `js/market.js`, gộp `marketModule()`, gọi `initMarket()`, thêm modal nhập giá vật tư |
+| `server/index.js` | Gọi `market.start()` sau khi web lên |
+| `web/components/view_market.html` | Bảng giá + biểu đồ chạy bằng dữ liệu thật |
+| `dashboard.html` | Nạp `web/js/market.js`, gộp `marketModule()`, gọi `initMarket()`, thêm modal nhập giá vật tư |
 
 ---
 

@@ -15,7 +15,7 @@ Trước khi làm gì, đây là những gì đã đọc được từ project c
 | Database | **Chưa có.** Dữ liệu ao nằm trong mảng `ponds[]` cứng trong `dashboard.html` |
 | Authentication | `localStorage` phía trình duyệt (`login.html` chỉ lưu tên + số điện thoại, chưa có server) |
 | Quản lý ao | Alpine component `farmApp()` trong `dashboard.html`, mỗi ao có `id`, `name`, `temperature`, `ph`, `do`, `fan`, `pump` |
-| Dashboard | `components/view_overview.html` render card ao, nút bật/tắt gọi `toggleDevice()` — trước đây chỉ đổi biến local |
+| Dashboard | `web/components/view_overview.html` render card ao, nút bật/tắt gọi `toggleDevice()` — trước đây chỉ đổi biến local |
 
 **Kết luận:** project chưa có backend nên phải tạo mới. Nguyên tắc đã tuân thủ: chọn công nghệ **không phá vỡ** kiến trúc hiện tại — backend Node.js thuần, phục vụ luôn file tĩnh, frontend giữ nguyên Alpine.js và chỉ được *thêm* một module IoT.
 
@@ -29,17 +29,17 @@ Trước khi làm gì, đây là những gì đã đọc được từ project c
 
 | File | Vai trò |
 |---|---|
-| `server/server.js` | HTTP server: phục vụ website + route API |
-| `server/api.js` | Toàn bộ logic API IoT (telemetry, command, ack, latest, history) |
-| `server/db.js` | Lớp database (SQLite của Node, tự động fallback JSON) |
+| `server/index.js` | HTTP server: phục vụ website + route API |
+| `server/routes/api.js` | Toàn bộ logic API IoT (telemetry, command, ack, latest, history) |
+| `server/lib/db.js` | Lớp database (SQLite của Node, tự động fallback JSON) |
 | `server/config.js` | Đọc cấu hình |
 | `server/config.example.json` | Mẫu cấu hình |
-| `server/seed.js` | Đăng ký thiết bị ESP32, sinh `device_token` |
+| `server/tools/seed.js` | Đăng ký thiết bị ESP32, sinh `device_token` |
 | `server/simulate_esp32.js` | Giả lập ESP32 để test web khi chưa cắm mạch |
 | `server/package.json` | Metadata (không có dependency nào) |
 | `server/.gitignore` | Chặn commit database và token |
 | `js/vast-config.js` | Cấu hình phía web (địa chỉ backend, chu kỳ poll) |
-| `js/iot.js` | Module Alpine kết nối ESP32 thật |
+| `web/js/iot.js` | Module Alpine kết nối ESP32 thật |
 | `esp32_vast/esp32_vast.ino` | Firmware ESP32 hoàn chỉnh |
 | `esp32_vast/config.h` | Toàn bộ cấu hình ESP32 (Wi-Fi, server, token, GPIO, ngưỡng) |
 
@@ -48,7 +48,7 @@ Trước khi làm gì, đây là những gì đã đọc được từ project c
 | File | Thay đổi |
 |---|---|
 | `dashboard.html` | Thêm 2 thẻ `<script>`; thêm `...iotModule()` vào `farmApp()`; gọi `this.initIot()` trong `initApp()`; `toggleDevice()`/`toggleAll()` nay gửi lệnh thật khi ao có ESP32; `initDetailChart()` vẽ lịch sử thật; `setChartTimeframe()` vẽ lại biểu đồ |
-| `components/view_overview.html` | Badge ONLINE/OFFLINE thật; banner mất kết nối; khối điện năng INA219; nút AUTO/MANUAL; nhãn GPIO26/GPIO27; ghi chú "Chưa kết nối cảm biến" ở ô pH; khoá nút tay khi AUTO |
+| `web/components/view_overview.html` | Badge ONLINE/OFFLINE thật; banner mất kết nối; khối điện năng INA219; nút AUTO/MANUAL; nhãn GPIO26/GPIO27; ghi chú "Chưa kết nối cảm biến" ở ô pH; khoá nút tay khi AUTO |
 
 `sketch_aug17a/sketch_aug17a.ino` (code cũ) **được giữ nguyên** làm bản dự phòng.
 
@@ -60,7 +60,7 @@ Database tự tạo lần đầu chạy server. Bạn chỉ cần chạy **một
 
 ```
 cd server
-node seed.js
+node tools/seed.js
 ```
 
 Lệnh này in ra `device_token` — copy vào `esp32_vast/config.h`.
@@ -161,7 +161,7 @@ Toàn bộ nằm trong **`esp32_vast/config.h`**, 3 mục đầu file:
 #define SERVER_URL      "http://192.168.1.10:3000"   // IP máy tính, KHÔNG dùng localhost
 
 #define DEVICE_ID       "ESP32_POND_01"
-#define DEVICE_TOKEN    "dán token từ node seed.js vào đây"
+#define DEVICE_TOKEN    "dán token từ node tools/seed.js vào đây"
 ```
 
 **Lấy IP máy tính (Windows):** mở Command Prompt → gõ `ipconfig` → tìm dòng `IPv4 Address` của card Wi-Fi.
@@ -182,8 +182,8 @@ Cần **Node.js 18 trở lên** (khuyến nghị 22.5+ để dùng SQLite; nếu
 
 ```
 cd "E:\Esp32 wifi\vietnamaismart-main\server"
-node seed.js          (chỉ chạy lần đầu — copy token in ra)
-node server.js
+node tools/seed.js          (chỉ chạy lần đầu — copy token in ra)
+node index.js
 ```
 
 Mở trình duyệt: **http://localhost:3000/dashboard.html**
@@ -198,7 +198,7 @@ Không cần `npm install`. Backend không dùng thư viện ngoài nào.
 
 ```
 cd server
-node simulate_esp32.js
+node tools/simulate_esp32.js
 ```
 
 Phím điều khiển: `q`/`a` giảm/tăng DO · `w`/`s` giảm/tăng nhiệt độ · `Ctrl+C` thoát.
@@ -275,7 +275,7 @@ Ngưỡng chỉnh trong `server/config.json` → `deviceOfflineSeconds` (mặc �
 
 **Test AUTO vẫn chạy khi mất Internet:**
 
-Tắt server (`Ctrl+C` cửa sổ `node server.js`) nhưng **giữ nguyên nguồn ESP32**. Vặn B10K cho DO xuống dưới 5.0 → **relay vẫn tách, guồng oxy vẫn bật**. Serial Monitor vẫn in trạng thái bình thường, chỉ báo `SERVER: MAT KET NOI`.
+Tắt server (`Ctrl+C` cửa sổ `node index.js`) nhưng **giữ nguyên nguồn ESP32**. Vặn B10K cho DO xuống dưới 5.0 → **relay vẫn tách, guồng oxy vẫn bật**. Serial Monitor vẫn in trạng thái bình thường, chỉ báo `SERVER: MAT KET NOI`.
 
 Logic bảo vệ chạy hoàn toàn tại thiết bị, không phụ thuộc Internet/AI/server.
 
