@@ -102,11 +102,75 @@
 
         <!-- CỘT PHẢI: LỊCH SỬ GẦN ĐÂY VÀ TỔNG SỐ DƯ -->
         <div class="card p-5 md:p-6 bg-slate-50/50 flex flex-col h-full">
-            <h3 class="font-bold text-lg text-slate-800 mb-4 border-b border-slate-200 pb-2">Giao dịch gần đây</h3>
+            <div class="flex items-center justify-between gap-2 mb-3 border-b border-slate-200 pb-2">
+                <h3 class="font-bold text-lg text-slate-800">Giao dịch</h3>
+                <span class="text-xs font-bold text-slate-400"
+                    x-text="txnTongLoc().so_dong + '/' + transactions.length + ' khoản'"></span>
+            </div>
+
+            <!-- ================= TÌM KIẾM & LỌC =================
+                 Lọc ngay trên trình duyệt nên gõ tới đâu thấy tới đó.
+                 ================================================== -->
+            <div class="space-y-2 mb-3">
+                <div class="relative flex items-center">
+                    <i data-lucide="search" class="absolute left-3 w-4 h-4 text-slate-400"></i>
+                    <input type="text" x-model="txnTimKiem"
+                        placeholder="Tìm theo danh mục, ghi chú, số tiền..."
+                        class="w-full py-2.5 pl-9 pr-9 text-sm bg-white border-2 border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-blue-500 transition-colors">
+                    <button x-show="txnTimKiem" x-cloak @click="txnTimKiem = ''"
+                        class="absolute right-2 p-1 text-slate-400 hover:text-slate-700 rounded-lg">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <!-- Lọc thu / chi -->
+                    <template x-for="l in [
+                            { ma: 'tat_ca', ten: 'Tất cả' },
+                            { ma: 'thu',    ten: 'Thu' },
+                            { ma: 'chi',    ten: 'Chi' }
+                        ]" :key="l.ma">
+                        <button @click="txnLocLoai = l.ma; txnHienTatCa = false"
+                            class="px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors"
+                            :class="txnLocLoai === l.ma
+                                ? (l.ma === 'thu' ? 'bg-green-50 border-green-500 text-green-700'
+                                   : l.ma === 'chi' ? 'bg-red-50 border-red-500 text-red-700'
+                                   : 'bg-slate-800 border-slate-800 text-white')
+                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'"
+                            x-text="l.ten"></button>
+                    </template>
+
+                    <!-- Lọc theo danh mục, chỉ liệt kê danh mục CÓ THẬT trong sổ -->
+                    <select x-model="txnLocDanhMuc" @change="txnHienTatCa = false"
+                        class="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-white border-2 border-slate-200 text-slate-600 focus:outline-none focus:border-blue-500 max-w-[9.5rem]">
+                        <option value="">Mọi danh mục</option>
+                        <template x-for="dm in txnDanhMucCo()" :key="dm">
+                            <option :value="dm" x-text="dm"></option>
+                        </template>
+                    </select>
+
+                    <button x-show="txnDangLoc()" x-cloak @click="txnXoaLoc()"
+                        class="px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+                        Xoá lọc
+                    </button>
+                </div>
+
+                <!-- Tổng của riêng phần đang lọc -->
+                <div x-show="txnDangLoc()" x-cloak
+                    class="flex flex-wrap gap-x-4 gap-y-1 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl text-xs font-bold">
+                    <span class="text-green-700">Thu <span x-text="txnTongLoc().thu.toLocaleString('vi-VN')"></span> đ</span>
+                    <span class="text-red-700">Chi <span x-text="txnTongLoc().chi.toLocaleString('vi-VN')"></span> đ</span>
+                    <span class="text-slate-700">Còn lại <span x-text="txnTongLoc().con_lai.toLocaleString('vi-VN')"></span> đ</span>
+                </div>
+            </div>
 
             <!-- Danh sách -->
             <div class="space-y-3 flex-1 overflow-y-auto max-h-64 no-scrollbar">
-                <template x-for="txn in transactions.slice().reverse().slice(0, 5)" :key="txn.id">
+                <template x-if="!txnHienThi().length">
+                    <p class="text-sm text-slate-400 font-medium text-center py-6"
+                        x-text="transactions.length ? 'Không có khoản nào khớp.' : 'Sổ sách chưa có khoản nào.'"></p>
+                </template>
+                <template x-for="txn in txnHienThi()" :key="txn.id">
                     <div
                         class="p-3 bg-white border border-slate-200 rounded-2xl flex justify-between items-center shadow-sm hover:border-blue-200 transition-colors">
 
@@ -157,11 +221,13 @@
                 <!-- ... -->
             </div>
 
-            <!-- Nút Xem tất cả -->
-            <button @click="showAllTransactionsModal = true"
-                class="w-full mt-2 mb-4 py-2 text-blue-600 font-bold text-sm bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors">
-                Xem tất cả giao dịch
-            </button>
+            <!-- Mở rộng ngay tại chỗ, không cần nhảy sang cửa sổ khác -->
+            <button x-show="txnDaLoc().length > 5" x-cloak
+                @click="txnHienTatCa = !txnHienTatCa"
+                class="w-full mt-2 mb-4 py-2 text-blue-600 font-bold text-sm bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors"
+                x-text="txnHienTatCa
+                    ? 'Thu gọn'
+                    : ('Xem tất cả ' + txnDaLoc().length + ' khoản' + (txnDangLoc() ? ' đang lọc' : ''))"></button>
 
             <!-- KHỐI TỔNG KẾT ĐIỆN VÀ SỐ DƯ -->
             <div class="mt-auto space-y-3 pt-4 border-t-2 border-dashed border-slate-200">

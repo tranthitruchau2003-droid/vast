@@ -64,6 +64,15 @@ function marketModule() {
         initMarket() {
             this.marketFetch();
             setInterval(() => this.marketFetch(), POLL_MS);
+
+            // Co van thu hoach + nhac cac ao da toi ngay du kien
+            this.hvTaiNhac();
+            setInterval(() => this.hvTaiNhac(), 5 * 60 * 1000);
+
+            // Luc khoi dong danh sach ao thuong CHUA nap xong, nen goi hvTai()
+            // ngay day se thoat som vi khong biet ao nao. Doi den khi co ao,
+            // va nap lai moi khi nguoi dung doi ao dang xem.
+            this.$watch('selectedPondId', () => this.hvTai());
         },
 
         /* ================= LAY BANG GIA ================= */
@@ -132,6 +141,12 @@ function marketModule() {
             const dau = this.market.all.find(i => i.region);
             this.market.region = dau ? dau.region : '';
 
+            // Nap co van thu hoach o day chu khong o initMarket(): luc khoi
+            // dong danh sach ao thuong chua ve, goi som thi thoat ngay vi
+            // khong biet ao nao. Ham nay chay sau moi lan lay gia (lan dau
+            // ngay khi mo trang) nen chac chan co ao roi.
+            if (!this.hv.dulieu && !this.hv.dangTai) this.hvTai();
+
             // Chua chon size nao -> chon size dau tien de bieu do co cai ma ve
             const rows = this.marketRows();
             if (rows.length && !rows.some(r => r.code === this.market.selectedCode)) {
@@ -180,6 +195,96 @@ function marketModule() {
         },
 
         /* ---- Dinh dang hien thi ---- */
+
+        /* ================= CO VAN THU HOACH =================
+           Truoc day the nay go cung: "Ao so 1", "size 50", "nuoi them 12
+           ngay", "ton ~15 trieu" - ao nao mo ra cung y het. Nut "Giu lai
+           nuoi tiep" khong co @click nen bam khong lam gi.
+
+           Nay goi /api/harvest, tinh tu chai mau + toc do lon do duoc +
+           gia thi truong. Thieu du lieu thi noi ro thieu gi.
+           =================================================== */
+
+        hv: {
+            dangTai: false,
+            pondId: null,
+            dulieu: null,      // { phan_tich, quyet_dinh, pond_name }
+            loi: '',
+            dangLuu: false,
+            nhac: [],          // cac ao da toi ngay du kien
+        },
+
+        /** Nap phan tich cho ao dang xem (hoac ao dau tien). */
+        async hvTai(pondId) {
+            const id = pondId || this.selectedPondId || (this.ponds && this.ponds[0] && this.ponds[0].id);
+            if (!id) { this.hv.dulieu = null; return; }
+
+            this.hv.dangTai = true;
+            this.hv.loi = '';
+            this.hv.pondId = id;
+            try {
+                const d = await this.storeApi('/api/harvest?pond_id=' + encodeURIComponent(id));
+                this.hv.dulieu = d;
+            } catch (e) {
+                this.hv.loi = e.message || 'Không lấy được phân tích thu hoạch';
+                this.hv.dulieu = null;
+            } finally {
+                this.hv.dangTai = false;
+                this.$nextTick(() => window.lucide?.createIcons());
+            }
+        },
+
+        hvPhanTich() { return this.hv.dulieu ? this.hv.dulieu.phan_tich : null; },
+        hvQuyetDinh() { return this.hv.dulieu ? this.hv.dulieu.quyet_dinh : null; },
+
+        /** Bam "Giu lai nuoi tiep" - dat moc va hen ngay nhac. */
+        async hvGiuLai() {
+            if (!this.hv.pondId || this.hv.dangLuu) return;
+            this.hv.dangLuu = true;
+            try {
+                const d = await this.storeApi('/api/harvest/keep', {
+                    method: 'POST',
+                    body: { pond_id: this.hv.pondId },
+                });
+                this.showToast?.(d.thong_bao, 'success');
+                await this.hvTai(this.hv.pondId);
+            } catch (e) {
+                this.showToast?.(e.message || 'Không đặt được mốc', 'error');
+            } finally {
+                this.hv.dangLuu = false;
+            }
+        },
+
+        /** Bo quyet dinh giu lai. */
+        async hvBoQuyetDinh() {
+            if (!this.hv.pondId) return;
+            try {
+                await this.storeApi('/api/harvest/cancel', {
+                    method: 'POST', body: { pond_id: this.hv.pondId },
+                });
+                this.showToast?.('Đã bỏ mốc nuôi tiếp', 'info');
+                await this.hvTai(this.hv.pondId);
+            } catch (e) {
+                this.showToast?.(e.message, 'error');
+            }
+        },
+
+        /** Cac ao da toi ngay du kien - hien thanh bang nhac tren dashboard. */
+        async hvTaiNhac() {
+            try {
+                const d = await this.storeApi('/api/harvest/reminders');
+                this.hv.nhac = d.nhac || [];
+            } catch (e) { /* chua dang nhap hoac mat mang - bo qua */ }
+        },
+
+        async hvDaXemNhac(pondId) {
+            try {
+                await this.storeApi('/api/harvest/reminder-seen', {
+                    method: 'POST', body: { pond_id: pondId },
+                });
+                this.hv.nhac = this.hv.nhac.filter(n => n.pond_id !== pondId);
+            } catch (e) { /* bo qua */ }
+        },
 
         marketPrice(n) {
             if (!Number.isFinite(n)) return '--';

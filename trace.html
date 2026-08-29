@@ -242,6 +242,10 @@
             // ---------- 2. ĐẦU VÀO ----------
             const dv = d.dau_vao || {};
             const tenNhom = { giong: 'Con giống', thuc_an: 'Thức ăn', xu_ly: 'Chất xử lý môi trường', thuoc: 'Thuốc' };
+            // Nhan ngay theo TUNG LOAI dau vao. Truoc day moi loai deu ghi
+            // "Ngay dung" - voi con giong thi cau do vo nghia, ngay do chinh
+            // la NGAY THA GIONG, va nguoi mua tom doc de hieu nham.
+            const nhanNgay = { giong: 'Ngày thả giống', thuc_an: 'Ngày cho ăn', xu_ly: 'Ngày xử lý', thuoc: 'Ngày dùng' };
             let htmlDauVao = '';
             for (const [k, items] of Object.entries(dv)) {
                 if (!items || !items.length) continue;
@@ -254,7 +258,7 @@
                         ${i.ma_lo ? `<div class="text-xs text-slate-500 font-medium">Mã lô: <b class="text-slate-700">${esc(i.ma_lo)}</b></div>` : ''}
                         ${i.hoat_chat ? `<div class="text-xs text-slate-500 font-medium">Hoạt chất: ${esc(i.hoat_chat)}</div>` : ''}
                         ${i.so_luong ? `<div class="text-xs text-slate-500 font-medium">Số lượng: ${num(i.so_luong)} ${esc(i.don_vi || '')}</div>` : ''}
-                        ${i.ngay_dung ? `<div class="text-xs text-slate-500 font-medium">Ngày dùng: ${ngay(i.ngay_dung)}</div>` : ''}
+                        ${i.ngay_dung ? `<div class="text-xs text-slate-500 font-medium">${esc(nhanNgay[k] || 'Ngày dùng')}: ${ngay(i.ngay_dung)}</div>` : ''}
                         ${i.ngung_truoc_thu_hoach_ngay ? `<div class="text-xs font-bold text-amber-700 mt-1">Ngừng ${esc(i.ngung_truoc_thu_hoach_ngay)} ngày trước thu hoạch</div>` : ''}
                         ${i.ghi_chu ? `<div class="text-[11px] text-slate-400 mt-1">${esc(i.ghi_chu)}</div>` : ''}
                     </div>`;

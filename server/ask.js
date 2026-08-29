@@ -132,6 +132,22 @@ const LOAI_VIEC = [
         mau: [/(bat|tat) (quat|suc khi|guong|bom|may)/, /sua (may|quat|bom)/, /thay may/],
     },
     {
+        // NAP CAM phai tach khoi CHO AN va uu tien cao hon.
+        //
+        // Hai viec nguoc chieu nhau: nap cam CONG vao kho, cho an TRU di.
+        // Truoc day "nap 50kg cam" roi vao muc "Cho an" -> ghi nhat ky xong
+        // thi kho cam van bao 0kg, nguoi dung tuong may hong.
+        //
+        // "nap cam" chua chu "cam" nen mau cua cho_an cung khop; de bang
+        // diem thi cho_an co the thang. Vi vay uu tien 45 > 40.
+        ma: 'nap_cam',
+        ten: 'Nạp cám vào máy',
+        icon: 'package-plus',
+        uu_tien: 45,
+        mau: [/nap (them )?cam/, /nap \d+ ?(kg|ky)/, /do cam vao (may|thung|pheu)/,
+            /chau them cam/, /them cam vao/, /do day cam/],
+    },
+    {
         ma: 'cho_an',
         ten: 'Cho ăn',
         icon: 'utensils',
@@ -569,7 +585,7 @@ const CAU_HOI = [
 
     {
         ma: 'chai_mau_cach',
-        tu: ['chai mau the nao', 'cach chai', 'can tom', 'do trong luong', 'abw', 'chai bao nhieu con'],
+        tu: ['chai mau', 'chai tom', 'cach chai', 'can tom', 'do trong luong', 'abw', 'chai bao nhieu con', 'chai mau the nao'],
         goi_y: 'Chài mẫu thế nào cho đúng?',
         traLoi() {
             const c = kb.CHAI_MAU;
@@ -747,6 +763,50 @@ function trongPhamVi(t) {
     return RE_NGANH.test(t);
 }
 
+// ================================================================
+// LOAI TOM NHAC TRONG CHINH CAU HOI
+// ----------------------------------------------------------------
+// "tom cang xanh an bao nhieu cu" tung duoc tra loi bang so lieu cua
+// TOM THE, vi tro ly chi nhin loai giong khai trong ao dang xem chu
+// khong doc cau hoi. Hoi mot dang dap mot neo.
+//
+// KHONG dung kb.chuanHoaLoai() cho ca cau: ham do bat \bsu\b, ma
+// "su co", "su that", "lam sao" ... deu chua tu "su" sau khi bo dau
+// -> se nhan nham thanh tom su. O day doi chat che hon: phai co chu
+// "tom" di kem, hoac ten dac trung khong the lan duoc.
+// ================================================================
+function loaiTuCauHoi(t) {
+    if (/(tom\s+)?cang\s*xanh|macrobrachium|rosenbergii/.test(t)) return 'cang_xanh';
+    if (/tom\s+su\b|monodon|\bsu\s+giong\b/.test(t)) return 'su';
+    if (/tom\s+the\b|chan\s+trang|vannamei|whiteleg/.test(t)) return 'the';
+    return null;
+}
+
+/**
+ * Cham diem mot cum tu khoa voi cau hoi.
+ *   2 diem: cau hoi chua nguyen cum
+ *   1 diem: chua phan lon cac tu cua cum (khac thu tu, chen tu o giua)
+ *
+ * Truoc day chi so khop nguyen cum, nen "chai mau nhu nao" khong khop
+ * duoc voi tu khoa "chai mau the nao" - lech dung mot chu.
+ */
+function diemKhop(t, tu) {
+    const tuTo = tu.split(' ').filter(Boolean);
+
+    // Trung nguyen cum: cang dai cang chac chan -> cham theo so tu.
+    //
+    // Phai nang diem hon han khop long, neu khong thi cau
+    // "tom cang xanh an BAO NHIEU CU" bi keo ve chu de "cho an bao nhieu
+    // ky" (khop long 'cho an bao nhieu') thay vi chu de lich cu an
+    // (khop nguyen cum 'bao nhieu cu') - hoi so cu ma dap so ky.
+    if (t.includes(tu)) return 2 * tuTo.length;
+
+    if (tuTo.length < 2) return 0;
+
+    const co = tuTo.filter(w => new RegExp('\\b' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(t)).length;
+    return (co / tuTo.length) >= 0.75 ? 1 : 0;   // 0.6 con qua de dai: 'bao nhieu la an toan' an ca cau hoi ve FCR
+}
+
 /**
  * Tra loi mot cau hoi.
  * @param {string} question
@@ -759,11 +819,11 @@ function traLoi(question, userId, pondId) {
 
     const t = boDau(q);
 
-    // Tim cau hoi khop nhat (dem so tu khoa trung)
+    // Tim cau hoi khop nhat
     let tot = null, diemTot = 0;
     for (const c of CAU_HOI) {
         let diem = 0;
-        for (const tu of c.tu) if (t.includes(tu)) diem++;
+        for (const tu of c.tu) diem += diemKhop(t, tu);
         if (diem > diemTot) { diemTot = diem; tot = c; }
     }
 
@@ -784,6 +844,7 @@ function traLoi(question, userId, pondId) {
                 // Loai tom cua ao. Chua khai bao thi kb tu lui ve tom the -
                 // loai pho bien nhat - va cau tra loi van noi ro dang noi ve loai nao.
                 loai: kb.chuanHoaLoai(bc.pond.seed_type),
+                loaiCuaAo: kb.chuanHoaLoai(bc.pond.seed_type),   // loai THAT cua ao, de doi chieu
                 khauPhan: bc.feed ? require('./feed').tinhKhauPhan({
                     seedCount: bc.feed.seed_count, survivalPct: bc.feed.survival_pct,
                     avgWeightG: bc.feed.avg_weight_g, ratePct: bc.feed.rate_pct,
@@ -827,10 +888,31 @@ function traLoi(question, userId, pondId) {
         };
     }
 
+    // ================================================================
+    // LOAI TOM NHAC TRONG CAU HOI DE LEN LOAI CUA AO
+    // ----------------------------------------------------------------
+    // Hoi "tom cang xanh an bao nhieu cu" thi phai tra loi ve tom cang
+    // xanh, du ao dang xem la ao tom the. Truoc day tro ly chi nhin ao
+    // nen hoi mot dang dap mot neo.
+    // ================================================================
+    const loaiHoi = loaiTuCauHoi(t);
+    if (loaiHoi) {
+        ctx = { ...ctx, loai: loaiHoi, loaiTuCauHoi: true };
+    }
+
     const kq = tot.traLoi(ctx);
+
+    // Noi ro dang tra loi ve loai nao, de khong ai hieu nham la so lieu cua ao minh
+    if (loaiHoi && ctx.loaiCuaAo && ctx.loaiCuaAo !== loaiHoi) {
+        kq.so_lieu_that = `Đang trả lời về ${kb.loaiTom(loaiHoi).ten.toLowerCase()} theo câu hỏi của bạn. `
+            + `Ao đang xem là ${kb.loaiTom(ctx.loaiCuaAo).ten.toLowerCase()}.`
+            + (kq.so_lieu_that ? ' ' + kq.so_lieu_that : '');
+    }
+
     return {
         ok: true,
         hieu_duoc: true,
+        loai_tra_loi: loaiHoi || ctx.loai || null,
         cau_hoi: q,
         chu_de: tot.ma,
         ...kq,

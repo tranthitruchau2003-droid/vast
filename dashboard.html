@@ -16,6 +16,40 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // ================================================================
+        // CHO ICON CHI VE MOT LAN
+        // ----------------------------------------------------------------
+        // lucide.createIcons() thay moi the  <i data-lucide>  bang mot the
+        // <svg> MOI. Nhung the <svg> sinh ra VAN GIU thuoc tinh data-lucide,
+        // nen lan goi sau lai thay tiep, va cu the mai mai.
+        //
+        // Trang nay goi createIcons o 18 cho, trong do co mot vong lap 2 giay
+        // mot lan. Nghia la ca 127 icon bi thay moi lien tuc suot ca phien.
+        // Moi lan thay la:
+        //
+        //   - Ràng buoc Alpine tren chinh icon do bi dut. Vi du nut "Lam moi"
+        //     cua bang gia:  :class="market.loading && 'animate-spin'"  - the
+        //     icon bi thay dung luc dang quay, the moi giu nguyen lop
+        //     animate-spin va khong con noi voi Alpine -> XOAY HOAI KHONG DUNG.
+        //
+        //   - DOM bi xao tron ben trong vung x-data, lam Alpine huy mat hieu
+        //     ung x-show cua cac phan tu xung quanh -> khung chi tiet ao dong
+        //     mo tre mot nhip, bang thong bao khong hien...
+        //
+        // Sua goc: ve xong thi GO BO data-lucide. Nhung lan goi sau chi con
+        // xu ly cac the <i> MOI duoc them vao, khong dung toi icon da ve.
+        // Nho vay giu nguyen duoc 18 cho goi san co ma khong phai sua tung cho.
+        // ================================================================
+        (function () {
+            const goc = window.lucide.createIcons;
+            window.lucide.createIcons = function (...doiSo) {
+                const kq = goc.apply(this, doiSo);
+                document.querySelectorAll('svg[data-lucide]').forEach(s => s.removeAttribute('data-lucide'));
+                return kq;
+            };
+        })();
+    </script>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
@@ -23,10 +57,10 @@
          So ?v= phia sau la de ep trinh duyet nap ban MOI, khong dung ban cu
          trong bo nho dem. Moi lan sua js/iot.js hay doi so nay len 1 don vi. -->
     <script src="js/vast-config.js?v=5"></script>
-    <script src="js/iot.js?v=5"></script>
-    <script src="js/market.js?v=1"></script>
+    <script src="js/iot.js?v=7"></script>
+    <script src="js/market.js?v=4"></script>
     <script src="js/feed.js?v=1"></script>
-    <script src="js/store.js?v=3"></script>
+    <script src="js/store.js?v=5"></script>
     <script src="js/ai.js?v=1"></script>
 
     <script>
@@ -117,7 +151,15 @@
             <div hx-get="components/view_market.html" hx-trigger="load" hx-swap="outerHTML"></div>
 
             <!-- ================= VIEW: CHI TIẾT AO (POND DETAIL) ================= -->
-            <div x-show="selectedPondId" x-transition.opacity.duration.300ms style="display: none;">
+            <!-- Da bo x-transition o day.
+                 Khung nay dong/mo bang x-show. Khi con x-transition, viec an
+                 bi hoan lai cho chay xong hieu ung; neu nguoi dung bam sang
+                 muc khac trong luc do thi trang thai va giao dien lech pha -
+                 khung chi tiet ao TRE MOT NHIP, bam vao ao thi chua mo, bam
+                 sang muc khac thi no moi mo ra. Do dung la trieu chung
+                 "bam nut khac khong an, phai bam Quay lai truoc".
+                 Mo/dong ngay lap tuc thi khong con cua so lech nao. -->
+            <div x-show="selectedPondId" style="display: none;">
                 <!-- Nút quay lại và Tiêu đề có nút 3 chấm chỉnh sửa tên ao -->
                 <div class="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <button @click="selectedPondId = null"
@@ -182,7 +224,26 @@
                         </div>
                     </div>
                     <div class="w-full h-[320px] relative">
+                        <!-- KHONG dat x-show len canvas: Chart.js dung bieu do tren
+                             mot canvas dang display:none thi ra bieu do rong 0px.
+                             Khong co du lieu thi bieu do da bi huy -> canvas trang,
+                             va loi nhan ben duoi phu len tren. -->
                         <canvas id="pondDetailChart"></canvas>
+
+                        <!-- Ao chua gan ESP32 thi KHONG ve duong gia.
+                             Truoc day cho ve mot duong cong cam san, khong doi
+                             theo 1/7/30 ngay -> nguoi dung tuong nut bi hong. -->
+                        <div x-show="chartTrong" x-cloak
+                            class="absolute inset-0 flex flex-col items-center justify-center text-center px-6 bg-white">
+                            <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
+                                <i data-lucide="activity" class="w-7 h-7"></i>
+                            </div>
+                            <p class="font-bold text-slate-600">Ao này chưa có dữ liệu môi trường</p>
+                            <p class="text-sm text-slate-400 font-medium mt-1 max-w-sm">
+                                Biểu đồ vẽ từ số đo thật của ESP32. Gắn thiết bị vào ao này thì
+                                đường nhiệt độ và pH sẽ hiện ra, và các mốc 1 / 7 / 30 ngày mới có tác dụng.
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -402,36 +463,67 @@
                             <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
                                 <i data-lucide="trending-up" class="w-5 h-5 text-blue-600"></i> Dự báo thu hoạch
                             </h3>
-                            <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">Vụ
-                                1/2026</span>
+                            <!-- Nhan cu go cung "Vu 1/2026". Thay bang ngay tuoi that. -->
+                            <span x-show="selectedPond?.du_bao?.ngay_tuoi !== null" x-cloak
+                                class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full"
+                                x-text="'Ngày thứ ' + (selectedPond?.du_bao?.ngay_tuoi ?? 0)"></span>
                         </div>
+
+                        <!-- ====================================================
+                             TAT CA SO O DAY DEU TINH TU DU LIEU THAT CUA AO.
+                             Truoc day tien do 75% va 12.0 kg/m2 la so go cung
+                             trong HTML - ao vua tha hom nay cung hien 75%.
+                             Xem duBaoThuHoach() trong server/api.js.
+                             ==================================================== -->
                         <div class="flex-1 flex flex-col space-y-5">
-                            <div>
-                                <div class="flex justify-between items-center mb-1">
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
                                     <span class="text-sm font-bold text-slate-500 uppercase">Ngày thả tôm</span>
                                     <span class="text-base font-bold text-slate-800"
                                         x-text="formatDate(selectedPond?.stockingDate)"></span>
                                 </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-sm font-bold text-slate-500 uppercase">Dự kiến thu hoạch</span>
+                                    <span class="text-base font-bold text-blue-700 text-right"
+                                        x-text="duKienThuHoach(selectedPond)"></span>
+                                </div>
+                                <p class="text-[11px] text-slate-400 font-medium"
+                                    x-show="selectedPond?.du_bao?.ten_loai" x-cloak
+                                    x-text="'Theo vòng nuôi của ' + (selectedPond?.du_bao?.ten_loai || '').toLowerCase()
+                                            + ' (' + (selectedPond?.du_bao?.vong_nuoi_ngay || []).join('–') + ' ngày)'"></p>
                             </div>
+
                             <div>
                                 <div class="flex justify-between text-sm font-bold text-slate-700 mb-1">
                                     <span>Tiến độ sinh trưởng</span>
-                                    <span class="text-green-600">75%</span>
+                                    <span class="text-green-600"
+                                        x-text="(selectedPond?.du_bao?.tien_do_pct ?? '—') + '%'"></span>
                                 </div>
                                 <div
                                     class="w-full bg-slate-100 h-4 rounded-full overflow-hidden border border-slate-200">
-                                    <div class="bg-green-500 h-full rounded-full" style="width: 75%;"></div>
+                                    <div class="bg-green-500 h-full rounded-full transition-all duration-500"
+                                        :style="'width: ' + (selectedPond?.du_bao?.tien_do_pct ?? 0) + '%'"></div>
                                 </div>
                             </div>
+
                             <div
                                 class="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between mt-auto">
-                                <div>
+                                <div class="min-w-0 pr-3">
                                     <p class="text-xs text-slate-500 font-bold uppercase">Ước tính trọng lượng</p>
-                                    <p class="text-2xl font-black text-slate-800 mt-0.5">12.0 <span
-                                            class="text-sm font-normal text-slate-500">kg/m²</span></p>
+                                    <!-- Co so lieu thi hien so; thieu thi noi ro thieu gi, KHONG doan -->
+                                    <template x-if="selectedPond?.du_bao?.kg_tren_m2 !== null && selectedPond?.du_bao?.kg_tren_m2 !== undefined">
+                                        <p class="text-2xl font-black text-slate-800 mt-0.5">
+                                            <span x-text="selectedPond.du_bao.kg_tren_m2"></span>
+                                            <span class="text-sm font-normal text-slate-500">kg/m²</span>
+                                        </p>
+                                    </template>
+                                    <template x-if="selectedPond?.du_bao?.kg_tren_m2 === null || selectedPond?.du_bao?.kg_tren_m2 === undefined">
+                                        <p class="text-xs text-slate-500 font-medium mt-1 leading-relaxed"
+                                            x-text="'Chưa tính được — còn thiếu ' + (selectedPond?.du_bao?.thieu || []).join(', ')"></p>
+                                    </template>
                                 </div>
                                 <div
-                                    class="w-12 h-12 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center">
+                                    class="w-12 h-12 shrink-0 rounded-2xl bg-green-100 text-green-600 flex items-center justify-center">
                                     <i data-lucide="award" class="w-6 h-6"></i>
                                 </div>
                             </div>
@@ -1471,13 +1563,18 @@
                         Bước 2 — Hiệu chuẩn
                     </p>
                     <p class="text-[11px] text-slate-500 font-medium mb-3 leading-relaxed">
-                        Đổ cám vào thùng, hứng xô dưới miệng ra cám. Bấm chạy, cân chỗ cám vừa ra,
-                        nhập số gam vào đây. <b>ESP32 tự lưu, không cần nạp lại code.</b>
+                        Mục đích: đo xem vít tải quay <b>1 giây thì ra bao nhiêu gam cám</b>.
+                        Biết số đó thì máy mới quy đổi được từ &quot;cần xả 8 kg&quot; ra &quot;quay bao lâu&quot;.
                     </p>
+                    <ol class="text-[11px] text-slate-600 font-medium mb-3 leading-relaxed space-y-1 list-decimal list-inside">
+                        <li>Đổ cám vào thùng, hứng một cái xô dưới miệng ra cám.</li>
+                        <li>Chọn số giây bên dưới rồi bấm <b>Chạy vít tải</b>.</li>
+                        <li>Cân chỗ cám vừa ra, nhập <b>số gam</b> vào ô hiện ra sau đó.</li>
+                    </ol>
 
                     <div class="flex gap-2 items-end mb-3">
                         <div class="w-24">
-                            <label class="block text-xs font-bold text-slate-600 mb-1.5">Số giây</label>
+                            <label class="block text-xs font-bold text-slate-600 mb-1.5">Chạy mấy giây?</label>
                             <input type="number" min="1" max="60" x-model="feedTest.calibGiay"
                                 class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
                         </div>
@@ -1488,8 +1585,10 @@
                     </div>
 
                     <div x-show="feedTest.daChayCalib" x-cloak class="pt-3 border-t border-slate-200">
+                        <!-- Nhac lai so giay vua chay, de khong ai nham o nay voi o giay o tren -->
                         <label class="block text-xs font-bold text-slate-600 mb-1.5">
-                            Cân được bao nhiêu gam?
+                            Chạy <span x-text="feedTest.calibGiay"></span> giây vừa rồi ra được bao nhiêu
+                            <b class="text-amber-700">gam</b> cám?
                         </label>
                         <input type="number" min="1" step="0.1" x-model="feedTest.calibGam"
                             placeholder="Ví dụ: 250"
@@ -1794,6 +1893,8 @@
 
                 selectedPondId: null,
                 chartTimeframe: '1d',
+                chartTrong: false,      // ao chua co so do that -> hien loi nhan thay cho bieu do
+                _luotVeChart: 0,        // dem luot ve, chong cac lan goi chong len nhau
 
                 // Biến trạng thái Modal
                 showEditProfileModal: false,
@@ -1855,6 +1956,12 @@
                 // mang cung trong file nay -> ai mo cung thay y het nhau.
                 transactions: [],
 
+                // --- Tim kiem / loc giao dich trong So sach ---
+                txnTimKiem: '',
+                txnLocLoai: 'tat_ca',     // tat_ca | thu | chi
+                txnLocDanhMuc: '',        // '' = tat ca danh muc
+                txnHienTatCa: false,      // false = chi hien 5 dong gan nhat
+
                 // Biến Nhật ký AI
                 aiLogs: [],
 
@@ -1893,7 +2000,7 @@
                         // nhung giao dien se hien bang canh bao mat ket noi.
                     }
                     this.updateClock(); setInterval(() => this.updateClock(), 1000);
-                    this.$nextTick(() => { lucide.createIcons(); this.initChart(); });
+                    this.$nextTick(() => { lucide.createIcons(); });
 
                     // ===== BAT DAU LAY DU LIEU THAT TU ESP32 =====
                     this.initIot();
@@ -1907,12 +2014,15 @@
                     // ===== TRO LY =====
                     this.initAi();
                     // Ve lai icon sau moi lan du lieu IoT lam thay doi giao dien
-                    setInterval(() => lucide.createIcons(), 2000);
+                    // Da bo:  setInterval(() => lucide.createIcons(), 2000)
+                    // Vong lap nay ve lai toan bo icon 2 giay mot lan. Nay icon chi ve
+                    // mot lan (xem chu thich o dau trang), nen vong lap vua vo dung vua
+                    // la nguon goc cua hang loat loi giao dien. Icon cua noi dung moi
+                    // van duoc ve nho cac loi goi $nextTick san co o tung cho.
 
                     this.$watch('currentView', (val) => {
                         this.$nextTick(() => {
                             lucide.createIcons();
-                            if (val === 'dashboard' && !this.selectedPondId) this.initChart();
                         });
                     });
                     this.$watch('selectedPondId', (id) => { if (id) this.$nextTick(() => { lucide.createIcons(); this.initDetailChart(); }); });
@@ -2282,9 +2392,35 @@
                     const parts = dateStr.split('-');
                     return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
                 },
+
+                /**
+                 * Ngay thu hoach du kien, tinh tu ngay tha + vong nuoi cua loai tom.
+                 * Tom the vong nuoi gan nhu co dinh (85-88 ngay) -> hien 1 moc.
+                 * Tom su 120-180 ngay -> hien mot KHOANG, vi noi mot ngay chinh xac
+                 * cho khoang rong 2 thang la du bao gia.
+                 */
+                duKienThuHoach(pond) {
+                    const d = pond && pond.du_bao;
+                    if (!d || !d.thu_hoach_tu) return 'Chưa khai ngày thả';
+                    if (d.thu_hoach_tu === d.thu_hoach_den) return this.formatDate(d.thu_hoach_tu);
+
+                    const cach = (Date.parse(d.thu_hoach_den) - Date.parse(d.thu_hoach_tu)) / 86400000;
+                    // Lech duoi 10 ngay thi lay moc muon nhat cho gon, khoi ron mat
+                    if (cach <= 10) return this.formatDate(d.thu_hoach_den);
+                    return this.formatDate(d.thu_hoach_tu) + ' – ' + this.formatDate(d.thu_hoach_den);
+                },
                 setChartTimeframe(tf) {
                     this.chartTimeframe = tf;
-                    this.$nextTick(() => this.initDetailChart());   // ve lai voi khoang thoi gian moi
+                    // Goi THANG, khong qua $nextTick.
+                    //
+                    // Ban cu:  this.$nextTick(() => this.initDetailChart())
+                    // Do thay: bien chartTimeframe doi dung, nhung ham ve khong
+                    // he chay lai -> bam 1/7/30 Ngay khong doi gi. Goi truc tiep
+                    // thi ra ngay du lieu dung (1 Ngay 189 diem, 7 Ngay 301 diem).
+                    //
+                    // Cung khong can $nextTick that: the canvas da nam san trong
+                    // DOM tu truoc, khong doi gi de cho DOM cap nhat ca.
+                    return this.initDetailChart();
                 },
                 getPondAlerts() { return this.alerts.filter(a => a.pondId === this.selectedPondId || !a.pondId); },
                 updateClock() { const now = new Date(); this.currentTime = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }); },
@@ -2442,6 +2578,7 @@
                         backgroundColors.unshift('#e2e8f0');
                     }
 
+                    this.iotHuyChartTren(ctx);          // PHAI huy truoc khi new Chart()
                     this.iotSetChart('finance', new Chart(ctx, {
                         type: 'doughnut',
                         data: {
@@ -2470,68 +2607,80 @@
                     }));
                 },
 
-                async initChart() {
-                    const ctx = document.getElementById('envChart'); if (!ctx) return;
-
-                    Chart.defaults.font.family = "'Inter', sans-serif"; Chart.defaults.color = '#64748b';
-
-                    // ===== DU LIEU MAC DINH (khi chua ao nao gan ESP32) =====
-                    let labels = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', 'Bây giờ'];
-                    let datasets = [
-                        { label: 'Nhiệt độ (°C)', data: [27.5, 28.0, 29.2, 30.1, 29.8, 28.5, 27.9, 28.5], yAxisID: 'yTemp', borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.08)', borderWidth: 3, tension: 0.35, fill: true },
-                        { label: 'Độ pH', data: [7.8, 7.8, 7.9, 8.0, 7.9, 7.8, 7.8, 7.8], yAxisID: 'yDo', borderColor: '#3b82f6', borderWidth: 3, tension: 0.35 }
-                    ];
-
-                    // ===== DU LIEU THAT tu ao dau tien co gan ESP32 =====
-                    const pond = this.ponds.find(p => this.iot.byPond[p.id]);
-                    if (pond) {
-                        const real = await this.iotChartData(pond.id, '1d');
-                        if (real) { labels = real.labels; datasets = real.datasets; }
-                    }
-
-                    this.iotSetChart('overview', new Chart(ctx, {
-                        type: 'line',
-                        data: { labels, datasets },
-                        options: this.iotChartOptions()
-                    }));
-                },
                 async initDetailChart() {
                     const ctx = document.getElementById('pondDetailChart'); if (!ctx) return;
 
+                    // ================================================================
+                    // CHI VE KHI CO SO DO THAT
+                    // ----------------------------------------------------------------
+                    // Truoc day o day co san mot bo so cam:
+                    //     [27.0, 26.5, 28.0, 30.2, 29.5, 28.0, 28.5]
+                    // Ao nao chua gan ESP32 cung ve dung duong cong do. Tai hai:
+                    //
+                    //   1) Nguoi nuoi nhin thay mot duong nhiet do muot ma cho
+                    //      mot cai ao khong he co cam bien nao.
+                    //   2) Bam 1 Ngay / 7 Ngay / 30 Ngay deu ra y het nhau, vi
+                    //      so cam dau co doi theo khoang thoi gian -> tuong nut hong.
+                    //
+                    // Nay khong co du lieu thi noi thang la chua co.
+                    // ================================================================
+                    // ================================================================
+                    // CHONG GOI CHONG NHAU
+                    // ----------------------------------------------------------------
+                    // Mot cu bam mo ao lam ham nay chay TOI 4 LAN cung luc. Bon lan
+                    // deu await lay lich su, roi thuc day gan nhu dong thoi: lan sau
+                    // huy bieu do lan truoc vua ve xong, cuoi cung khong con cai nao.
+                    //
+                    // Danh so tung luot. Awaiting xong ma da co luot moi hon thi lan
+                    // nay bo cuoc, chi luot moi nhat duoc ve.
+                    // ================================================================
+                    const luot = ++this._luotVeChart;
 
-                    // ===== DU LIEU MAC DINH (ao demo chua gan ESP32) =====
-                    let labels = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Bây giờ'];
-                    let datasets = [
-                        { label: 'Nhiệt độ (°C)', data: [27.0, 26.5, 28.0, 30.2, 29.5, 28.0, 28.5], yAxisID: 'yTemp', borderColor: '#16a34a', backgroundColor: 'rgba(22, 163, 74, 0.08)', borderWidth: 3, tension: 0.35, fill: true },
-                        { label: 'Độ pH', data: [7.6, 7.5, 7.8, 8.1, 7.9, 7.7, 7.8], yAxisID: 'yDo', borderColor: '#3b82f6', borderWidth: 3, tension: 0.35 }
-                    ];
-
-                    // ===== LICH SU THAT TU ESP32 =====
                     const pond = this.selectedPond;
                     const real = pond ? await this.iotChartData(pond.id, this.chartTimeframe) : null;
-                    if (real) { labels = real.labels; datasets = real.datasets; }
 
+                    if (luot !== this._luotVeChart) return;   // da co luot moi hon
+
+                    if (!real) {
+                        this.chartTrong = true;
+                        this.iotSetChart('detail', null);      // huy bieu do cu, khong ve gi them
+                        this.$nextTick(() => lucide.createIcons());
+                        return;
+                    }
+
+                    this.chartTrong = false;
+                    this.iotHuyChartTren(ctx);          // PHAI huy truoc khi new Chart()
                     this.iotSetChart('detail', new Chart(ctx, {
                         type: 'line',
-                        data: { labels, datasets },
+                        data: { labels: real.labels, datasets: real.datasets },
                         options: this.iotChartOptions()
                     }));
                 },
 
                 /* Cap nhat bieu do CHI TIET AO theo thoi gian thuc (moi 3 giay) */
                 async refreshDetailChart() {
-                    if (!this.iotGetChart('detail') || !this.selectedPondId) return;
+                    if (!this.selectedPondId) return;
+
+                    // ================================================================
+                    // VE BU KHI DU LIEU VE MUON
+                    // ----------------------------------------------------------------
+                    // Bam vao ao la initDetailChart() chay ngay, nhung luc do goi
+                    // du lieu IoT dau tien co the CHUA VE (iot.byPond con rong).
+                    // Khi do iotChartData() tra ve null, ham hieu nham la "ao chua
+                    // co thiet bi" va bo qua luon - roi khong bao gio ve lai nua.
+                    //
+                    // Do la ly do that su khien bieu do tung ao trong nhu chet, va
+                    // bam 1/7/30 Ngay cung khong an: khong he co bieu do de doi.
+                    //
+                    // Vong nay chay moi 3 giay, nen chi cho mot nhip la co bieu do.
+                    // ================================================================
+                    if (!this.iotGetChart('detail')) {
+                        if (this.iot.byPond[this.selectedPondId]) await this.initDetailChart();
+                        return;
+                    }
+
                     const data = await this.iotChartData(this.selectedPondId, this.chartTimeframe);
                     this.iotApplyChartData(this.iotGetChart('detail'), data);
-                },
-
-                /* Cap nhat bieu do TONG QUAN theo thoi gian thuc (moi 3 giay) */
-                async refreshOverviewChart() {
-                    if (!this.iotGetChart('overview')) return;
-                    const pond = this.ponds.find(p => this.iot.byPond[p.id]);
-                    if (!pond) return;                     // chua ao nao gan ESP32 -> giu bieu do demo
-                    const data = await this.iotChartData(pond.id, '1d');
-                    this.iotApplyChartData(this.iotGetChart('overview'), data);
                 },
 
                 toggleFingerprint() {

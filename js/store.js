@@ -527,6 +527,87 @@ function storeModule() {
             return `${window.location.origin}/trace.html?code=${encodeURIComponent(p.trace_code)}`;
         },
 
+        /* ================= TIM KIEM & LOC GIAO DICH =================
+           Truoc day So sach chi hien 5 giao dich gan nhat, khong tim duoc
+           gi ca. Ca vu nuoi vai tram dong thi khong the ra soat noi.
+
+           Loc ngay tren trinh duyet, khong goi lai may chu: server da tra
+           ve toi 500 dong mot lan, loc tai cho thi go den dau thay den do.
+           ============================================================ */
+
+        /** Bo dau tieng Viet de tim "thuc an" ra duoc ca "Thức ăn". */
+        txnBoDau(s) {
+            return String(s || '')
+                .normalize('NFD').replace(/[̀-ͯ]/g, '')
+                .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+                .toLowerCase().trim();
+        },
+
+        /** Cac danh muc CO THAT trong so sach, de do vao o chon. */
+        txnDanhMucCo() {
+            const co = new Set();
+            for (const t of this.transactions || []) if (t.category) co.add(t.category);
+            return [...co].sort((a, b) => a.localeCompare(b, 'vi'));
+        },
+
+        /** Danh sach giao dich sau khi loc, moi nhat len truoc. */
+        txnDaLoc() {
+            const tu = this.txnBoDau(this.txnTimKiem);
+            const loai = this.txnLocLoai;
+            const dm = this.txnLocDanhMuc;
+
+            return (this.transactions || [])
+                .filter(t => {
+                    if (loai !== 'tat_ca' && t.type !== loai) return false;
+                    if (dm && t.category !== dm) return false;
+                    if (!tu) return true;
+
+                    if (this.txnBoDau(t.category).includes(tu)) return true;
+                    if (this.txnBoDau(t.note).includes(tu)) return true;
+                    if (this.txnBoDau(t.date).includes(tu)) return true;
+
+                    // Tim theo SO TIEN: go "500" ra duoc 500.000.
+                    //
+                    // Phai kiem tra chuoi so RONG truoc. Go "thuc an" thi phan so
+                    // con lai la '', ma String(x).includes('') LUON dung -> ca so
+                    // sach deu khop, bo loc coi nhu vo dung.
+                    const so = tu.replace(/\D/g, '');
+                    if (so && String(t.amount || '').includes(so)) return true;
+
+                    return false;
+                })
+                .slice()
+                .reverse();
+        },
+
+        /** Phan thuc su hien ra: mac dinh 5 dong, bam "Xem tat ca" thi mo het. */
+        txnHienThi() {
+            const ds = this.txnDaLoc();
+            return this.txnHienTatCa ? ds : ds.slice(0, 5);
+        },
+
+        /** Dang loc gi khong - de biet co hien nut "Xoa loc" hay khong. */
+        txnDangLoc() {
+            return !!(this.txnTimKiem || this.txnLocDanhMuc || this.txnLocLoai !== 'tat_ca');
+        },
+
+        txnXoaLoc() {
+            this.txnTimKiem = '';
+            this.txnLocLoai = 'tat_ca';
+            this.txnLocDanhMuc = '';
+            this.txnHienTatCa = false;
+        },
+
+        /** Tong thu / chi CUA PHAN DANG LOC - khong phai cua ca so sach. */
+        txnTongLoc() {
+            let thu = 0, chi = 0;
+            for (const t of this.txnDaLoc()) {
+                if (t.type === 'thu') thu += Number(t.amount) || 0;
+                else chi += Number(t.amount) || 0;
+            }
+            return { thu, chi, con_lai: thu - chi, so_dong: this.txnDaLoc().length };
+        },
+
         storeTraceCode(pond) {
             const p = pond || this.selectedPond;
             return p && p.trace_code ? p.trace_code : '';

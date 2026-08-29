@@ -287,6 +287,38 @@ function createSqliteImpl() {
     );
     CREATE INDEX IF NOT EXISTS idx_feedlog ON feed_log(pond_id, created_at);
 
+    -- pond_samples : LICH SU chai mau.
+    --
+    -- pond_feed chi giu trong luong CUA LAN GAN NHAT, nen khong the biet
+    -- tom lon nhanh hay cham. Muon tra loi "nuoi them bao nhieu ngay nua
+    -- thi len duoc size 40" thi bat buoc phai co it nhat HAI lan can.
+    CREATE TABLE IF NOT EXISTS pond_samples (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        pond_id      TEXT NOT NULL,
+        avg_weight_g REAL NOT NULL,
+        sample_count INTEGER,
+        total_g      REAL,
+        created_at   TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_sample ON pond_samples(pond_id, created_at);
+
+    -- pond_harvest_plan : quyet dinh "giu lai nuoi tiep".
+    --
+    -- Chu ao xem co van thu hoach roi bam giu lai -> ghi lai moc size dang
+    -- nham toi va ngay du kien dat duoc, de den ngay do he thong con nhac.
+    -- Truoc day nut nay khong lam gi ca.
+    CREATE TABLE IF NOT EXISTS pond_harvest_plan (
+        pond_id        TEXT PRIMARY KEY,
+        size_hien_tai  REAL,
+        size_muc_tieu  REAL,
+        ngay_du_kien   TEXT,
+        loi_lai_uoc    REAL,
+        ghi_chu        TEXT,
+        da_nhac        INTEGER DEFAULT 0,
+        created_at     TEXT NOT NULL,
+        updated_at     TEXT
+    );
+
     -- ============ TAI KHOAN & DU LIEU NGUOI DUNG ============
     -- Truoc day toan bo phan nay nam trong localStorage cua trinh duyet:
     -- doi may la mat sach. Chuyen han vao database.
@@ -559,6 +591,24 @@ function createSqliteImpl() {
         feedLogAdd: db.prepare('INSERT INTO feed_log (pond_id, kind, amount_kg, note, created_at) VALUES (?,?,?,?,?)'),
         feedLogRecent: db.prepare('SELECT * FROM feed_log WHERE pond_id=? ORDER BY id DESC LIMIT ?'),
         feedLogSince: db.prepare('SELECT * FROM feed_log WHERE pond_id=? AND created_at >= ? ORDER BY created_at ASC'),
+
+        // ---- LICH SU CHAI MAU ----
+        sampleAdd: db.prepare(`INSERT INTO pond_samples
+            (pond_id, avg_weight_g, sample_count, total_g, created_at) VALUES (?,?,?,?,?)`),
+        sampleList: db.prepare('SELECT * FROM pond_samples WHERE pond_id=? ORDER BY created_at ASC'),
+
+        // ---- QUYET DINH GIU LAI NUOI TIEP ----
+        hpGet: db.prepare('SELECT * FROM pond_harvest_plan WHERE pond_id=?'),
+        hpAll: db.prepare('SELECT * FROM pond_harvest_plan'),
+        hpSave: db.prepare(`INSERT INTO pond_harvest_plan
+            (pond_id, size_hien_tai, size_muc_tieu, ngay_du_kien, loi_lai_uoc, ghi_chu, da_nhac, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,0,?,?)
+            ON CONFLICT(pond_id) DO UPDATE SET
+              size_hien_tai=excluded.size_hien_tai, size_muc_tieu=excluded.size_muc_tieu,
+              ngay_du_kien=excluded.ngay_du_kien, loi_lai_uoc=excluded.loi_lai_uoc,
+              ghi_chu=excluded.ghi_chu, da_nhac=0, updated_at=excluded.updated_at`),
+        hpDanhDauNhac: db.prepare('UPDATE pond_harvest_plan SET da_nhac=1, updated_at=? WHERE pond_id=?'),
+        hpXoa: db.prepare('DELETE FROM pond_harvest_plan WHERE pond_id=?'),
 
         // ---- TAI KHOAN ----
         userByPhone: db.prepare('SELECT * FROM users WHERE phone = ?'),
@@ -833,6 +883,21 @@ function createSqliteImpl() {
             q.feedLogAdd.run(pondId, kind, amountKg, note || null, nowIso()),
         feedLogRecent: (pondId, limit = 20) => q.feedLogRecent.all(pondId, limit),
         feedLogSince: (pondId, sinceIso) => q.feedLogSince.all(pondId, sinceIso),
+
+        // ---- LICH SU CHAI MAU ----
+        sampleAdd: (pondId, w, soCon, tongG) =>
+            q.sampleAdd.run(pondId, w, soCon || null, tongG || null, nowIso()),
+        sampleList: pondId => q.sampleList.all(pondId),
+
+        // ---- QUYET DINH GIU LAI NUOI TIEP ----
+        harvestPlanGet: pondId => q.hpGet.get(pondId) || null,
+        harvestPlanAll: () => q.hpAll.all(),
+        harvestPlanSave: (p) => q.hpSave.run(
+            p.pond_id, p.size_hien_tai ?? null, p.size_muc_tieu ?? null,
+            p.ngay_du_kien ?? null, p.loi_lai_uoc ?? null, p.ghi_chu ?? null,
+            nowIso(), nowIso()),
+        harvestPlanDanhDauNhac: pondId => q.hpDanhDauNhac.run(nowIso(), pondId),
+        harvestPlanXoa: pondId => q.hpXoa.run(pondId),
 
         // ================= TAI KHOAN =================
         userByPhone: phone => q.userByPhone.get(phone) || null,
@@ -1191,6 +1256,36 @@ function createJsonImpl() {
             data.feedLog.filter(l => l.pond_id === pondId).slice(-limit).reverse(),
         feedLogSince: (pondId, sinceIso) =>
             data.feedLog.filter(l => l.pond_id === pondId && l.created_at >= sinceIso),
+
+        // ---- LICH SU CHAI MAU ----
+        sampleAdd(pondId, w, soCon, tongG) {
+            if (!data.samples) data.samples = [];
+            data.samples.push({
+                id: data.samples.length + 1, pond_id: pondId, avg_weight_g: w,
+                sample_count: soCon || null, total_g: tongG || null, created_at: nowIso(),
+            });
+            save();
+        },
+        sampleList: pondId => (data.samples || []).filter(x => x.pond_id === pondId),
+
+        // ---- QUYET DINH GIU LAI NUOI TIEP ----
+        harvestPlanGet: pondId => (data.harvestPlan || {})[pondId] || null,
+        harvestPlanAll: () => Object.values(data.harvestPlan || {}),
+        harvestPlanSave(p) {
+            if (!data.harvestPlan) data.harvestPlan = {};
+            data.harvestPlan[p.pond_id] = { ...p, da_nhac: 0, created_at: nowIso(), updated_at: nowIso() };
+            save();
+        },
+        harvestPlanDanhDauNhac(pondId) {
+            if (data.harvestPlan && data.harvestPlan[pondId]) {
+                data.harvestPlan[pondId].da_nhac = 1;
+                data.harvestPlan[pondId].updated_at = nowIso();
+                save();
+            }
+        },
+        harvestPlanXoa(pondId) {
+            if (data.harvestPlan) { delete data.harvestPlan[pondId]; save(); }
+        },
 
         // ================= TAI KHOAN =================
         userByPhone: phone => data.users.find(u => u.phone === phone) || null,

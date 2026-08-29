@@ -20,52 +20,120 @@
                     xuất</span>
             </div>
 
-            <!-- Có đủ dữ liệu giá -> nói bằng SỐ THẬT -->
-            <template x-if="marketGap(50)">
-                <div>
-                    <p class="text-blue-50 text-sm md:text-base font-medium mb-5 leading-relaxed">
-                        <b class="text-white">Ao số 1</b> đang ở size <b class="text-white">50 con/kg</b>.
-                        Giá thị trường hôm nay:
-                        <b class="text-white" x-text="marketPrice(marketGap(50).from.price) + ' đ/kg'"></b>
-                        cho size 50, và
-                        <b class="text-white"
-                            x-text="marketPrice(marketGap(50).to.price) + ' đ/kg'"></b>
-                        cho <span x-text="marketGap(50).to.size_label.toLowerCase()"></span> —
-                        chênh lệch
-                        <b class="text-amber-300"
-                            x-text="marketPrice(marketGap(50).diff) + ' đ/kg'"></b>.
-                    </p>
+            <!-- ============================================================
+                 TOAN BO SO O DAY LAY TU /api/harvest.
+                 Truoc day khoi nay go cung "Ao so 1 / size 50 / 12 ngay /
+                 ~15 trieu" - ao nao mo ra cung y het, va nut Giu lai khong
+                 co @click nen bam khong lam gi.
+                 ============================================================ -->
+            <div x-init="hvTai()"></div>
 
-                    <div
-                        class="bg-white/10 p-5 rounded-2xl border border-white/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mt-4">
-                        <div class="w-full md:w-auto">
-                            <p class="text-sm text-blue-100 font-medium mb-2">Dự kiến nuôi thêm 12 ngày:</p>
-                            <div class="flex flex-col sm:flex-row sm:gap-6 gap-2">
-                                <p
-                                    class="text-sm flex justify-between sm:block w-full sm:w-auto border-b border-white/10 pb-1 sm:border-0 sm:pb-0">
-                                    <span class="text-blue-200">Chi phí cám:</span> <b class="text-white">~15 Triệu</b>
-                                </p>
-                                <p class="text-sm flex justify-between sm:block w-full sm:w-auto">
-                                    <span class="text-blue-200">Doanh thu tăng:</span>
-                                    <b class="text-green-300" x-text="'~' + marketPrice(marketGap(50).diff * 1000) + ' đ'"></b>
-                                    <span class="text-[10px] text-blue-200 block sm:inline">(ước cho 1 tấn tôm)</span>
-                                </p>
-                            </div>
+            <template x-if="hv.dangTai && !hvPhanTich()">
+                <p class="text-blue-100 text-sm font-medium">Đang tính…</p>
+            </template>
+
+            <!-- Thieu du lieu -> noi ro thieu gi, KHONG bia so -->
+            <template x-if="!hv.dangTai && hvPhanTich() && !hvPhanTich().ok">
+                <div class="text-blue-50 text-sm md:text-base font-medium leading-relaxed">
+                    <template x-if="hvPhanTich().ket_luan">
+                        <p x-text="hvPhanTich().ket_luan"></p>
+                    </template>
+                    <template x-if="!hvPhanTich().ket_luan">
+                        <div>
+                            <p class="mb-2">Chưa tính được nên bán hay nuôi thêm. Còn thiếu:</p>
+                            <ul class="space-y-1 ml-1">
+                                <template x-for="t in hvPhanTich().thieu" :key="t">
+                                    <li class="flex items-start gap-2">
+                                        <span class="text-amber-300 font-black">&bull;</span>
+                                        <span x-text="t"></span>
+                                    </li>
+                                </template>
+                            </ul>
                         </div>
-                        <button
-                            class="w-full md:w-auto px-6 py-3 mt-2 md:mt-0 bg-white text-indigo-700 font-black rounded-xl hover:bg-blue-50 transition-colors active:scale-95 shadow-lg whitespace-nowrap">
-                            Giữ lại nuôi tiếp
-                        </button>
-                    </div>
+                    </template>
                 </div>
             </template>
 
-            <!-- Chưa đủ dữ liệu giá -> NÓI THẲNG, không bịa con số -->
-            <template x-if="!marketGap(50)">
-                <p class="text-blue-50 text-sm md:text-base font-medium leading-relaxed">
-                    Chưa đủ dữ liệu giá thị trường để so sánh chênh lệch giữa các size.
-                    Bấm <b class="text-white">Làm mới</b> ở bảng giá bên dưới để lấy giá mới nhất.
-                </p>
+            <!-- Du du lieu -> noi bang so that -->
+            <template x-if="!hv.dangTai && hvPhanTich() && hvPhanTich().ok">
+                <div>
+                    <p class="text-blue-50 text-sm md:text-base font-medium mb-4 leading-relaxed">
+                        <b class="text-white" x-text="hv.dulieu.pond_name"></b> đang ở size
+                        <b class="text-white" x-text="hvPhanTich().size_hien_tai + ' con/kg'"></b>
+                        (<span x-text="hvPhanTich().w_hien_tai_g + ' g/con'"></span>).
+                        Nuôi thêm <b class="text-amber-300" x-text="hvPhanTich().so_ngay_nuoi_them + ' ngày'"></b>
+                        thì lên size <b class="text-white" x-text="hvPhanTich().size_muc_tieu + ' con/kg'"></b>,
+                        giá từ <b class="text-white" x-text="marketPrice(hvPhanTich().gia_hien_tai) + ' đ'"></b>
+                        lên <b class="text-white" x-text="marketPrice(hvPhanTich().gia_muc_tieu) + ' đ'"></b>/kg.
+                    </p>
+
+                    <p class="text-[11px] text-blue-200 font-medium mb-4">
+                        Tốc độ lớn <b x-text="hvPhanTich().toc_do_lon_g_ngay + ' g/ngày'"></b>,
+                        đo từ hai lần chài mẫu cách nhau
+                        <b x-text="hvPhanTich().toc_do_do_tu.so_ngay + ' ngày'"></b>
+                        (<span x-text="hvPhanTich().toc_do_do_tu.w_dau + ' → ' + hvPhanTich().toc_do_do_tu.w_cuoi + ' g'"></span>).
+                    </p>
+
+                    <div class="bg-white/10 p-5 rounded-2xl border border-white/20 backdrop-blur-md">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 mb-4">
+                            <div>
+                                <p class="text-[11px] text-blue-200 font-bold uppercase">Sinh khối</p>
+                                <p class="text-white font-bold text-sm"
+                                    x-text="hvPhanTich().sinh_khoi_kg.toLocaleString('vi-VN') + ' → ' + hvPhanTich().sinh_khoi_sau_kg.toLocaleString('vi-VN') + ' kg'"></p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] text-blue-200 font-bold uppercase">Doanh thu tăng</p>
+                                <p class="text-green-300 font-bold text-sm"
+                                    x-text="'+' + marketPrice(hvPhanTich().chenh_lech) + ' đ'"></p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] text-blue-200 font-bold uppercase">Tiền cám</p>
+                                <p class="text-sm font-bold"
+                                    :class="hvPhanTich().chi_phi_cam === null ? 'text-amber-300' : 'text-red-200'"
+                                    x-text="hvPhanTich().chi_phi_cam === null
+                                        ? 'chưa có giá cám'
+                                        : ('-' + marketPrice(hvPhanTich().chi_phi_cam) + ' đ')"></p>
+                            </div>
+                            <div>
+                                <p class="text-[11px] text-blue-200 font-bold uppercase">Lời ròng</p>
+                                <p class="text-sm font-black"
+                                    :class="hvPhanTich().loi_rong === null ? 'text-amber-300'
+                                            : (hvPhanTich().loi_rong > 0 ? 'text-green-300' : 'text-red-200')"
+                                    x-text="hvPhanTich().loi_rong === null
+                                        ? '--'
+                                        : ((hvPhanTich().loi_rong > 0 ? '+' : '') + marketPrice(hvPhanTich().loi_rong) + ' đ')"></p>
+                            </div>
+                        </div>
+
+                        <p class="text-sm text-blue-50 font-medium mb-4 leading-relaxed" x-text="hvPhanTich().ly_do"></p>
+
+                        <template x-if="!hvQuyetDinh()">
+                            <button @click="hvGiuLai()" :disabled="hv.dangLuu"
+                                class="w-full md:w-auto px-6 py-3 bg-white text-indigo-700 font-black rounded-xl hover:bg-blue-50 transition-colors active:scale-95 shadow-lg disabled:opacity-60"
+                                x-text="hv.dangLuu ? 'Đang lưu…' : 'Giữ lại nuôi tiếp'"></button>
+                        </template>
+
+                        <template x-if="hvQuyetDinh()">
+                            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                                <div class="flex-1 px-4 py-3 bg-green-500/20 border border-green-300/40 rounded-xl">
+                                    <p class="text-green-100 text-sm font-bold">
+                                        Đang giữ nuôi tiếp tới size
+                                        <span x-text="hvQuyetDinh().size_muc_tieu + ' con/kg'"></span>
+                                    </p>
+                                    <p class="text-[11px] text-green-200 font-medium mt-0.5">
+                                        Dự kiến <span x-text="formatDate(hvQuyetDinh().ngay_du_kien)"></span> — tới ngày đó hệ thống sẽ nhắc
+                                    </p>
+                                </div>
+                                <button @click="hvBoQuyetDinh()"
+                                    class="px-4 py-2.5 bg-white/10 border border-white/30 text-white font-bold rounded-xl text-sm hover:bg-white/20 transition-colors whitespace-nowrap">
+                                    Bỏ mốc
+                                </button>
+                            </div>
+                        </template>
+
+                        <p class="text-[11px] text-blue-200 font-medium mt-4 leading-relaxed" x-text="hvPhanTich().luu_y"></p>
+                    </div>
+                </div>
             </template>
         </div>
     </div>

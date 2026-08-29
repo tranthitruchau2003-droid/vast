@@ -10,7 +10,15 @@
 
     <nav class="flex-1 overflow-y-auto py-6 px-4 space-y-2 font-medium">
         <template x-for="item in navItems" :key="item.id">
-            <a href="#" @click.prevent="currentView = item.id; if(item.id === 'dashboard') selectedPondId = null;"
+            <!-- LUON xoa selectedPondId, khong chi rieng muc 'dashboard'.
+                 Truoc day:  if(item.id === 'dashboard') selectedPondId = null
+                 -> dang xem chi tiet mot ao ma bam "Tro ly AI" hay "So sach"
+                 thi currentView co doi that, nhung selectedPondId van con nen
+                 man hinh chi tiet ao van de len tren. Nguoi dung thay nhu cac
+                 nut chet, phai bam "Quay lai" truoc moi di duoc.
+                 Thanh dieu huong ban mobile (dashboard.html) von da xoa vo
+                 dieu kien - nen loi nay chi xuat hien tren ban may tinh. -->
+            <a href="#" @click.prevent="currentView = item.id; selectedPondId = null;"
                 :class="currentView === item.id && !selectedPondId ? 'bg-green-50 text-green-700 font-bold' : 'text-slate-600 hover:bg-slate-50'"
                 class="flex items-center px-4 py-3.5 rounded-2xl transition-colors">
                 <i :data-lucide="item.icon" class="w-6 h-6 mr-4"

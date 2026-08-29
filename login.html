@@ -60,8 +60,28 @@
 <!-- Sửa min-h-screen thành h-screen để ngăn cuộn nếu không cần thiết, và đảm bảo căn giữa tuyệt đối -->
 
 <body
-    class="font-sans bg-brand-bg text-brand-textPrimary w-full h-screen flex flex-col justify-center items-center p-4 sm:p-6"
-    hx-boost="true">
+    class="font-sans bg-brand-bg text-brand-textPrimary w-full h-screen flex flex-col justify-center items-center p-4 sm:p-6"><!--
+    KHONG dat hx-boost o day.
+
+    Truoc day co  hx-boost="true"  va no lam hong han viec bao loi dang nhap:
+    go sai mat khau thi khong hien thong bao nao, trang tu nap lai, mat luon
+    so dien thoai vua go.
+
+    Vi sao: hx-boost bao HTMX cuop moi luot submit trong trang. Ket qua la
+    CA HAI cung chay - Alpine goi API, nhan 401, gan thong bao loi; roi ngay
+    sau do HTMX tai lai login.html va thay toan bo noi dung, cuon troi ca
+    thong bao lan du lieu nguoi dung vua nhap.
+
+    Nhat ky mang luc do:
+        POST /api/auth/login  -> 401     (Alpine, dung)
+        GET  /login.html      -> 200     (HTMX boost, pha hong)
+
+    Luu y:  @submit.prevent  KHONG cuu duoc. No chi chan hanh vi submit goc
+    cua trinh duyet, con listener cua HTMX gan o tang document van chay.
+
+    Trang nay chi co 2 duong dan, boost khong nhanh them duoc bao nhieu, ma
+    doi lai mot loi rat kho doan ra. Bo han.
+-->
 
     <!-- Wrapper tổng chứa toàn bộ nội dung, giới hạn chiều cao max-h-full để tránh tràn -->
     <div
@@ -159,11 +179,13 @@
                                 placeholder="Nhập mật khẩu" required>
 
                             <!-- Nút ẩn/hiện mật khẩu -->
+                            <!-- Ve san CA HAI icon, chi an/hien - KHONG goi lucide.createIcons()
+                                 lai sau khi Alpine da chay. Xem chu thich cuoi trang. -->
                             <button type="button"
                                 class="absolute right-4 text-slate-400 p-1 cursor-pointer hover:text-brand-primary transition-colors focus:outline-none"
-                                @click="showPassword = !showPassword; $nextTick(() => lucide.createIcons())">
-                                <template x-if="!showPassword"><i data-lucide="eye" class="w-5 h-5"></i></template>
-                                <template x-if="showPassword"><i data-lucide="eye-off" class="w-5 h-5"></i></template>
+                                @click="showPassword = !showPassword">
+                                <span x-show="!showPassword"><i data-lucide="eye" class="w-5 h-5"></i></span>
+                                <span x-show="showPassword" x-cloak><i data-lucide="eye-off" class="w-5 h-5"></i></span>
                             </button>
                         </div>
                     </div>
@@ -238,14 +260,33 @@
 
     <!-- Khởi tạo Icon Lucide -->
     <script>
-        document.addEventListener('alpine:init', () => {
-            lucide.createIcons();
-        });
-
-        document.body.addEventListener('htmx:afterSwap', function () {
-            lucide.createIcons();
-        });
-
+        // ================================================================
+        // CHI GOI lucide.createIcons() DUNG MOT LAN, VA PHAI TRUOC ALPINE
+        // ----------------------------------------------------------------
+        // createIcons() thay moi the  <i data-lucide>  bang mot the <svg>
+        // moi. Do la mot thay doi DOM that su.
+        //
+        // Neu viec thay do xay ra BEN TRONG mot vung x-data SAU khi Alpine
+        // da khoi dong, Alpine se huy mat hieu ung cua  x-show  o cac phan
+        // tu anh em trong cung vung do. Ket qua rat kho doan:
+        //
+        //     x-text van cap nhat, x-bind van cap nhat, RIENG x-show chet.
+        //
+        // Loi that da gap: go sai mat khau thi  loi  duoc gan dung, chu
+        // cung duoc do vao the div, nhung the do vinh vien dinh
+        // display:none -> nguoi dung khong thay bao gi ca.
+        //
+        // Da kiem chung bang trang thu toi gian: de icon NGOAI form thi
+        // x-show chay tot, dua icon VAO trong form thi chet ngay.
+        //
+        // Vi Alpine nap bang  defer , the <script> noi tuyen o day chay
+        // TRUOC no. Nen goi mot lan tai day la an toan: luc Alpine di
+        // duyet DOM thi khong con the <i data-lucide> nao de thay nua.
+        //
+        // DUNG them lan goi nao trong 'alpine:init', 'alpine:initialized'
+        // hay trong @click. Muon doi icon thi ve san ca hai roi an/hien
+        // bang x-show, nhu nut xem mat khau o tren.
+        // ================================================================
         lucide.createIcons();
     </script>
     <style>

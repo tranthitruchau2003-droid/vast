@@ -74,11 +74,11 @@ function iotModule() {
             setInterval(() => this.iotRefreshCharts(), CHART_REFRESH_MS);
         },
 
-        /* Ve lai ca 2 bieu do (tong quan + chi tiet ao) ma KHONG giat man hinh */
+        /* Ve lai bieu do CHI TIET AO ma KHONG giat man hinh.
+           Bieu do "moi truong chung" o man hinh tong quan da duoc bo. */
         async iotRefreshCharts() {
             if (document.hidden) return;              // tab dang chay nen -> khoi ton tai nguyen
             if (this.selectedPondId) await this.refreshDetailChart();
-            else if (this.currentView === 'dashboard') await this.refreshOverviewChart();
         },
 
         /* ================= LAY DU LIEU VE BIEU DO =================
@@ -210,6 +210,41 @@ function iotModule() {
             if (_bieuDo[ten]) { try { _bieuDo[ten].destroy(); } catch (e) { } }
             _bieuDo[ten] = chart;
             return chart;
+        },
+
+        /**
+         * Huy bieu do dang bam tren MOT THE CANVAS, truoc khi ve cai moi.
+         *
+         * ================================================================
+         * VI SAO CAN HAM NAY
+         * ----------------------------------------------------------------
+         * Cach viet cu:
+         *
+         *     this.iotSetChart('detail', new Chart(ctx, {...}))
+         *
+         * Nhin thi tuong iotSetChart se huy bieu do cu. Nhung Javascript
+         * tinh doi so TRUOC khi goi ham: `new Chart(...)` chay truoc, gap
+         * canvas dang con bieu do cu bam vao nen Chart.js nem loi
+         *
+         *     "Canvas is already in use. Chart with ID '1' must be
+         *      destroyed before the canvas can be reused."
+         *
+         * Loi nem ra giua chung nen iotSetChart KHONG BAO GIO duoc goi,
+         * bieu do cu van con nguyen. Ket qua: bam 1 Ngay / 7 Ngay / 30 Ngay
+         * khong doi gi het, va loi thi nam im trong console.
+         *
+         * Nen: goi ham nay TRUOC khi new Chart().
+         * ================================================================
+         */
+        iotHuyChartTren(canvas) {
+            if (!canvas) return;
+            try {
+                const cu = (window.Chart && Chart.getChart) ? Chart.getChart(canvas) : null;
+                if (cu) cu.destroy();
+            } catch (e) { /* khong co gi de huy */ }
+            for (const ten of Object.keys(_bieuDo)) {
+                if (_bieuDo[ten] && _bieuDo[ten].canvas === canvas) _bieuDo[ten] = null;
+            }
         },
         iotGetChart(ten) {
             return _bieuDo[ten];

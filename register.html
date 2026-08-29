@@ -60,8 +60,13 @@
 <!-- Sửa min-h-screen thành h-screen để ngăn cuộn nếu không cần thiết, và đảm bảo căn giữa tuyệt đối -->
 
 <body
-    class="font-sans bg-brand-bg text-brand-textPrimary w-full h-screen flex flex-col justify-center items-center p-4 sm:p-6"
-    hx-boost="true">
+    class="font-sans bg-brand-bg text-brand-textPrimary w-full h-screen flex flex-col justify-center items-center p-4 sm:p-6"><!--
+    KHONG dat hx-boost o day - xem giai thich day du trong login.html.
+
+    Tom tat: hx-boost cuop luot submit, HTMX tai lai trang ngay sau khi
+    Alpine vua gan thong bao loi -> nhap sai so dien thoai thi khong thay
+    bao gi, trang tu nap lai, mat het du lieu vua go.
+-->
 
     <!-- Wrapper tổng chứa toàn bộ nội dung, giới hạn chiều cao max-h-full để tránh tràn -->
     <div
@@ -173,9 +178,9 @@
                             <!-- Nút Toggle Password -->
                             <button type="button"
                                 class="absolute right-4 text-slate-400 p-1 cursor-pointer hover:text-brand-primary transition-colors focus:outline-none"
-                                @click="showPassword = !showPassword; $nextTick(() => lucide.createIcons())">
-                                <template x-if="!showPassword"><i data-lucide="eye" class="w-5 h-5"></i></template>
-                                <template x-if="showPassword"><i data-lucide="eye-off" class="w-5 h-5"></i></template>
+                                @click="showPassword = !showPassword">
+                                <span x-show="!showPassword"><i data-lucide="eye" class="w-5 h-5"></i></span>
+                                <span x-show="showPassword" x-cloak><i data-lucide="eye-off" class="w-5 h-5"></i></span>
                             </button>
                         </div>
                     </div>
@@ -209,14 +214,10 @@
 
     <!-- Khởi tạo Icon Lucide -->
     <script>
-        document.addEventListener('alpine:init', () => {
-            lucide.createIcons();
-        });
-
-        document.body.addEventListener('htmx:afterSwap', function () {
-            lucide.createIcons();
-        });
-
+        // CHI goi mot lan, va phai TRUOC khi Alpine khoi dong.
+        // Goi lai sau do (trong alpine:init hay trong @click) se lam chet
+        // x-show o cac phan tu trong cung vung x-data -> bao loi khong hien.
+        // Giai thich day du trong login.html.
         lucide.createIcons();
     </script>
     <style>

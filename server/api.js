@@ -32,6 +32,8 @@ const trace = require('./trace');
 const advisor = require('./advisor');
 const ask = require('./ask');
 const qr = require('./qr');
+const kb = require('./kb');
+const harvest = require('./harvest');
 
 // ----------------------------------------------------------------
 // TIEN ICH
@@ -128,9 +130,9 @@ function buildAlerts(d) {
         alerts.push({
             code: 'DEVICE_OFFLINE',
             level: 'danger',
-            title: 'MAT KET NOI',
-            message: `ESP32 (${d.device_id}) mat ket noi`,
-            recommendation: 'Kiem tra nguon dien va Wi-Fi cua thiet bi. Che do AUTO van chay tren ESP32.',
+            title: 'MẤT KẾT NỐI',
+            message: `ESP32 (${d.device_id}) mất kết nối`,
+            recommendation: 'Kiểm tra nguồn điện và Wi-Fi của thiết bị. Chế độ AUTO vẫn chạy trên ESP32.',
         });
         return alerts; // Offline thi so lieu da cu, khong canh bao theo so cu nua
     }
@@ -139,9 +141,9 @@ function buildAlerts(d) {
         alerts.push({
             code: 'DO_LOW',
             level: 'danger',
-            title: 'DO THAP',
-            message: `DO ${d.do_value.toFixed(2)} mg/L (duoi ${th.doOn}) - He thong dang bat guong oxy`,
-            recommendation: 'ESP32 da tu dong bat guong oxy. Theo doi den khi DO >= ' + th.doOff + ' mg/L.',
+            title: 'DO THẤP',
+            message: `DO ${d.do_value.toFixed(2)} mg/L (dưới ${th.doOn}) — hệ thống đang bật guồng oxy`,
+            recommendation: 'ESP32 đã tự động bật guồng oxy. Theo dõi đến khi DO ≥ ' + th.doOff + ' mg/L.',
         });
     }
 
@@ -149,9 +151,9 @@ function buildAlerts(d) {
         alerts.push({
             code: 'TEMP_HIGH',
             level: 'warning',
-            title: 'NHIET DO CAO',
-            message: `Nhiet do nuoc ${d.temperature.toFixed(1)}°C (tren ${th.tempPumpOn}°C) - He thong dang bat may bom`,
-            recommendation: 'ESP32 da tu dong bat may bom cap nuoc. Che dat them luoi che nang neu keo dai.',
+            title: 'NHIỆT ĐỘ CAO',
+            message: `Nhiệt độ nước ${d.temperature.toFixed(1)}°C (trên ${th.tempPumpOn}°C) — hệ thống đang bật máy bơm`,
+            recommendation: 'ESP32 đã tự động bật máy bơm cấp nước. Cân nhắc che thêm lưới chắn nắng nếu kéo dài.',
         });
     }
 
@@ -162,17 +164,17 @@ function buildAlerts(d) {
             alerts.push({
                 code: 'CURRENT_HIGH',
                 level: 'danger',
-                title: 'DONG DIEN BAT THUONG',
-                message: `Dong dien ${Math.round(d.current_ma)} mA vuot nguong ${ca.maxCurrentMa} mA`,
-                recommendation: 'Nghi ngo motor/bom bi ket hoac chap tai. Kiem tra ngay.',
+                title: 'DÒNG ĐIỆN BẤT THƯỜNG',
+                message: `Dòng điện ${Math.round(d.current_ma)} mA vượt ngưỡng ${ca.maxCurrentMa} mA`,
+                recommendation: 'Nghi ngờ motor hoặc bơm bị kẹt, hoặc chập tải. Kiểm tra ngay.',
             });
         } else if ((d.pump || d.aerator) && d.current_ma < ca.minRunningMa) {
             alerts.push({
                 code: 'CURRENT_LOW',
                 level: 'warning',
-                title: 'THIET BI KHONG AN DONG',
-                message: `Relay dang BAT nhung dong dien chi ${Math.round(d.current_ma)} mA`,
-                recommendation: 'Nghi ngo dut day / hong motor. Kiem tra duong tai.',
+                title: 'THIẾT BỊ KHÔNG ĂN DÒNG',
+                message: `Relay đang BẬT nhưng dòng điện chỉ ${Math.round(d.current_ma)} mA`,
+                recommendation: 'Nghi ngờ đứt dây hoặc hỏng motor. Kiểm tra đường tải.',
             });
         }
     }
@@ -953,8 +955,45 @@ handlers['POST /api/feed/sample'] = (req, res, body) => {
     });
     db.feedLogAdd(pondId, 'sample', null, `Chài mẫu: ${Math.round(w * 100) / 100} g/con`);
 
+    // Luu them vao LICH SU chai mau.
+    // pond_feed chi giu lan gan nhat; muon biet tom lon nhanh hay cham -
+    // tuc muon tra loi "nuoi them may ngay nua thi len size" - thi phai
+    // co it nhat hai lan can de so voi nhau.
+    db.sampleAdd(pondId, Math.round(w * 100) / 100,
+        Number(b.sample_count) || null, Number(b.total_weight_g) || null);
+
     send(res, 200, { ok: true, avg_weight_g: Math.round(w * 100) / 100, plan: buildFeedPlan(pondId) });
 };
+
+/**
+ * Cong cam vao kho ao. Dung chung cho nut "Nap thuc an" va cho nhat ky
+ * giong noi ("nap 50kg cam") - hai duong khac nhau nhung phai ra cung
+ * mot ket qua, khong duoc cai cong cai khong.
+ *
+ * Bao ro khi bi CAT BOT. Truoc day thung chua 20kg ma nap 50kg thi may
+ * lang le vut di 30kg, man hinh khong noi gi - nguoi dung tuong may hong.
+ *
+ * @returns {{ok:boolean, error?:string, trong_may_kg?:number, da_cat_bot_kg?:number}}
+ */
+function napCamVaoMay(pondId, kg, ghiChu) {
+    const cu = db.feedGet(pondId);
+    if (!cu) return { ok: false, error: 'Ao này chưa khai báo thông số máy cho ăn' };
+
+    const truoc = cu.feed_stock_kg || 0;
+    const sucChua = cu.feed_stock_max_kg || null;
+    const congDon = truoc + kg;
+    const sau = sucChua ? Math.min(congDon, sucChua) : congDon;
+
+    db.feedSetStock(pondId, sau);
+    db.feedLogAdd(pondId, 'refill', kg, ghiChu || null);
+
+    return {
+        ok: true,
+        trong_may_kg: Math.round(sau * 10) / 10,
+        suc_chua_kg: sucChua,
+        da_cat_bot_kg: Math.round((congDon - sau) * 10) / 10,
+    };
+}
 
 handlers['POST /api/feed/refill'] = (req, res, body) => {
     const b = body || {};
@@ -965,14 +1004,18 @@ handlers['POST /api/feed/refill'] = (req, res, body) => {
         return send(res, 400, { ok: false, error: 'Số kg nạp vào không hợp lệ' });
     }
 
-    const cu = db.feedGet(pondId);
-    if (!cu) return send(res, 404, { ok: false, error: 'Ao này chưa khai báo thông số máy cho ăn' });
+    const r = napCamVaoMay(pondId, kg, b.note);
+    if (!r.ok) return send(res, 404, { ok: false, error: r.error });
 
-    const moi = (cu.feed_stock_kg || 0) + kg;
-    db.feedSetStock(pondId, cu.feed_stock_max_kg ? Math.min(moi, cu.feed_stock_max_kg) : moi);
-    db.feedLogAdd(pondId, 'refill', kg, b.note || null);
-
-    send(res, 200, { ok: true, plan: buildFeedPlan(pondId) });
+    send(res, 200, {
+        ok: true,
+        ...r,
+        canh_bao: r.da_cat_bot_kg > 0
+            ? `Thùng chỉ chứa được ${r.suc_chua_kg} kg nên đã bỏ qua ${r.da_cat_bot_kg} kg. `
+                + 'Nếu thùng của bạn to hơn, sửa lại sức chứa trong mục Chài mẫu & thông số cho ăn.'
+            : null,
+        plan: buildFeedPlan(pondId),
+    });
 };
 
 /**
@@ -1329,11 +1372,90 @@ handlers['POST /api/auth/password'] = (req, res, body) => {
 // ---------------- AO NUOI ----------------
 
 /** Gop thong tin ao + trang thai cam bien + khau phan -> 1 goi cho web. */
+/**
+ * ================================================================
+ * DU BAO THU HOACH
+ * ----------------------------------------------------------------
+ * Truoc day the "Du bao thu hoach" tren dashboard go SO CUNG vao
+ * HTML: tien do 75%, uoc tinh 12.0 kg/m2. Ao vua tha hom nay cung
+ * hien 75%. Do khong phai du bao, do la mot buc anh.
+ *
+ * Nay tinh tu so lieu THAT nguoi dung da nhap luc tao ao:
+ *
+ *   Ngay tuoi   = hom nay - ngay tha
+ *   Tien do     = ngay tuoi / vong nuoi cua loai  (chan tren 100%)
+ *   Thu hoach   = ngay tha + vong nuoi
+ *   Sinh khoi   = so giong x ty le song x trong luong TB / 1000
+ *   kg/m2       = sinh khoi / dien tich ao
+ *
+ * Vong nuoi tung loai lay tu kb.js (tai lieu ky thuat), khong go tay.
+ *
+ * Thieu so lieu nao thi NOI RO thieu gi, khong doan. Mot con so
+ * nang suat bia ra co the lam nguoi ta quyet dinh sai thoi diem ban.
+ * ================================================================
+ */
+function duBaoThuHoach(p) {
+    const thieu = [];
+    if (!p.stocking_date) thieu.push('ngày thả giống');
+    if (!(p.area_m2 > 0)) thieu.push('diện tích ao');
+
+    const loai = kb.chuanHoaLoai(p.seed_type);
+    const vong = kb.loaiTom(loai).vong_nuoi_ngay;      // [som nhat, muon nhat]
+    const tenLoai = kb.loaiTom(loai).ten;
+
+    let ngayTuoi = null, tienDo = null, thuHoachTu = null, thuHoachDen = null;
+    if (p.stocking_date) {
+        const moc = new Date(p.stocking_date);
+        moc.setHours(0, 0, 0, 0);
+        const homNay = new Date();
+        homNay.setHours(0, 0, 0, 0);
+
+        ngayTuoi = Math.max(0, Math.round((homNay - moc) / 86400000));
+        // Chia cho moc MUON NHAT -> tien do khong bao gio vuot thuc te
+        tienDo = Math.min(100, Math.round((ngayTuoi / vong[1]) * 100));
+
+        const cong = (n) => new Date(moc.getTime() + n * 86400000).toISOString().slice(0, 10);
+        thuHoachTu = cong(vong[0]);
+        thuHoachDen = cong(vong[1]);
+    }
+
+    // Sinh khoi can trong luong trung binh tu CHAI MAU
+    const f = db.feedGet(p.pond_id) || {};
+    const soGiong = p.seed_count || f.seed_count || null;
+    const tyLeSong = f.survival_pct || null;
+    const wTB = f.avg_weight_g || null;
+
+    if (!soGiong) thieu.push('số con giống đã thả');
+    if (!tyLeSong) thieu.push('tỷ lệ sống dự kiến');
+    if (!wTB) thieu.push('trọng lượng trung bình (chài mẫu)');
+
+    let sinhKhoiKg = null, kgTrenM2 = null;
+    if (soGiong && tyLeSong && wTB) {
+        sinhKhoiKg = Math.round((soGiong * (tyLeSong / 100) * wTB / 1000) * 10) / 10;
+        if (p.area_m2 > 0) kgTrenM2 = Math.round((sinhKhoiKg / p.area_m2) * 100) / 100;
+    }
+
+    return {
+        loai: loai,
+        ten_loai: tenLoai,
+        ngay_tuoi: ngayTuoi,
+        vong_nuoi_ngay: vong,
+        tien_do_pct: tienDo,
+        thu_hoach_tu: thuHoachTu,
+        thu_hoach_den: thuHoachDen,
+        sinh_khoi_kg: sinhKhoiKg,
+        kg_tren_m2: kgTrenM2,
+        thieu,
+        ghi_chu: loai ? null : 'Ao chưa khai loại giống — đang tạm tính theo tôm thẻ chân trắng.',
+    };
+}
+
 function shapePond(p) {
     const device = db.listDevices().find(d => d.pond_id === p.pond_id) || null;
     const latest = device ? shapeLatest(device) : null;
 
     return {
+        du_bao: duBaoThuHoach(p),
         id: p.pond_id,
         pond_id: p.pond_id,
         name: p.name,
@@ -1709,6 +1831,104 @@ handlers['POST /api/transactions/delete'] = (req, res, body) => {
 // ghi ro con so nao dan toi ket luan do.
 // ================================================================
 
+// ================================================================
+// CO VAN THU HOACH: BAN NGAY HAY NUOI THEM?
+// ----------------------------------------------------------------
+//   GET  /api/harvest?pond_id=...            phan tich bang so that
+//   POST /api/harvest/keep                   bam "Giu lai nuoi tiep"
+//   POST /api/harvest/cancel                 bo quyet dinh do
+//   GET  /api/harvest/reminders              cac ao da toi ngay du kien
+// ================================================================
+
+handlers['GET /api/harvest'] = async (req, res) => {
+    const u = canDangNhap(req, res); if (!u) return;
+
+    const pondId = String(req.query.get('pond_id') || '');
+    const pond = db.pondGet(pondId);
+    if (!pond || pond.user_id !== u.id) return send(res, 404, { ok: false, error: 'Không tìm thấy ao' });
+
+    // Gia cam: uu tien so nguoi dung tu nhap trong Cai dat, vi gia dai ly
+    // bao cho tung trai lech nhau nhieu. Khong co thi de null va noi ro.
+    const cai = db.settingsGet(u.id) || {};
+    const giaCam = Number(cai.gia_cam_kg) > 0 ? Number(cai.gia_cam_kg) : null;
+
+    const kq = harvest.phanTich(pond, market.snapshot({}), giaCam);
+
+    send(res, 200, {
+        ok: true,
+        pond_id: pondId,
+        pond_name: pond.name,
+        phan_tich: kq,
+        quyet_dinh: db.harvestPlanGet(pondId),
+    });
+};
+
+handlers['POST /api/harvest/keep'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    const b = body || {};
+    const pondId = String(b.pond_id || '');
+    const pond = db.pondGet(pondId);
+    if (!pond || pond.user_id !== u.id) return send(res, 404, { ok: false, error: 'Không tìm thấy ao' });
+
+    // Tinh lai o may chu, KHONG tin so tu trinh duyet gui len.
+    // Nguoi dung co the da mo trang tu hom qua, gia da doi.
+    const cai = db.settingsGet(u.id) || {};
+    const giaCam = Number(cai.gia_cam_kg) > 0 ? Number(cai.gia_cam_kg) : null;
+    const pt = harvest.phanTich(pond, market.snapshot({}), giaCam);
+
+    if (!pt.ok) {
+        return send(res, 400, {
+            ok: false,
+            error: pt.ket_luan || ('Chưa đủ dữ liệu để đặt mốc: còn thiếu ' + (pt.thieu || []).join(', ')),
+            phan_tich: pt,
+        });
+    }
+
+    db.harvestPlanSave({
+        pond_id: pondId,
+        size_hien_tai: pt.size_hien_tai,
+        size_muc_tieu: pt.size_muc_tieu,
+        ngay_du_kien: pt.ngay_du_kien,
+        loi_lai_uoc: pt.loi_rong,
+        ghi_chu: b.note || null,
+    });
+
+    db.logCreate(u.id, pondId,
+        `[Thu hoạch] Giữ lại nuôi tiếp tới size ${pt.size_muc_tieu} con/kg, `
+        + `dự kiến ${pt.ngay_du_kien} (còn ${pt.so_ngay_nuoi_them} ngày)`);
+
+    send(res, 200, {
+        ok: true,
+        quyet_dinh: db.harvestPlanGet(pondId),
+        thong_bao: `Đã đặt mốc: nuôi thêm ${pt.so_ngay_nuoi_them} ngày tới size ${pt.size_muc_tieu} con/kg. `
+            + `Tới ngày ${pt.ngay_du_kien} hệ thống sẽ nhắc.`,
+    });
+};
+
+handlers['POST /api/harvest/cancel'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    const pondId = String((body || {}).pond_id || '');
+    const pond = db.pondGet(pondId);
+    if (!pond || pond.user_id !== u.id) return send(res, 404, { ok: false, error: 'Không tìm thấy ao' });
+
+    db.harvestPlanXoa(pondId);
+    send(res, 200, { ok: true });
+};
+
+handlers['GET /api/harvest/reminders'] = (req, res) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    send(res, 200, { ok: true, nhac: harvest.nhacToiHan(u.id) });
+};
+
+handlers['POST /api/harvest/reminder-seen'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    const pondId = String((body || {}).pond_id || '');
+    const pond = db.pondGet(pondId);
+    if (!pond || pond.user_id !== u.id) return send(res, 404, { ok: false, error: 'Không tìm thấy ao' });
+    db.harvestPlanDanhDauNhac(pondId);
+    send(res, 200, { ok: true });
+};
+
 handlers['GET /api/advisor'] = (req, res) => {
     const u = canDangNhap(req, res); if (!u) return;
 
@@ -1803,10 +2023,35 @@ handlers['POST /api/logs'] = (req, res, body) => {
 
     db.logCreate(u.id, pondId, (nhan + noiDung).slice(0, 500));
 
+    // ================================================================
+    // GHI "NAP 50KG CAM" THI PHAI CONG THAT VAO KHO
+    // ----------------------------------------------------------------
+    // Truoc day nhat ky chi luu chu. Nguoi dung noi "nap 50kg thuc an",
+    // nhat ky hien dep de, nhung the may cho an van bao con 0kg - tuong
+    // may hong. Hai duong di cung mot viec ma khong noi chuyen voi nhau.
+    //
+    // Chi cong khi CHAC CHAN: dung loai viec 'nap_cam', co so kg ro rang,
+    // va biet dang ghi cho ao nao. Thieu mot trong ba thi khong doan.
+    // ================================================================
+    let napCam = null;
+    if (loai === 'nap_cam' && pondId && phanLoai.ok && phanLoai.so_lieu && phanLoai.so_lieu.kg > 0) {
+        const r = napCamVaoMay(pondId, phanLoai.so_lieu.kg, 'Ghi từ nhật ký');
+        if (r.ok) {
+            napCam = {
+                da_cong_kg: phanLoai.so_lieu.kg,
+                trong_may_kg: r.trong_may_kg,
+                canh_bao: r.da_cat_bot_kg > 0
+                    ? `Thùng chỉ chứa được ${r.suc_chua_kg} kg nên chỉ ghi nhận tới mức đầy.`
+                    : null,
+            };
+        }
+    }
+
     send(res, 200, {
         ok: true,
         loai,
         loai_ten: phanLoai.ok ? phanLoai.loai_ten : null,
+        nap_cam: napCam,
         pond_name: pondId ? (db.pondGet(pondId) || {}).name : null,
         nhac_them: phanLoai.ok ? phanLoai.nhac_them : null,
         logs: db.logList(u.id, 100),
@@ -1824,6 +2069,7 @@ const CAI_DAT_CHO_PHEP = new Set([
     'farm_gps',               // toa do GPS - hien tren QR truy xuat
     'farm_official_code',     // MA CO SO NUOI do co quan nong nghiep cap (khac ma noi bo)
     'farm_address',           // dia chi vung nuoi
+    'gia_cam_kg',             // gia 1 kg cam (d) - de tinh chi phi khi co van thu hoach
 ]);
 
 handlers['GET /api/settings'] = (req, res) => {
