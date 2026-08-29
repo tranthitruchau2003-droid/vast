@@ -115,6 +115,7 @@
                         phone: '',
                         password: '',
                         showPassword: false,
+                        showQuenMatKhau: false,
                         dangGui: false,
                         loi: '',
 
@@ -190,22 +191,23 @@
                         </div>
                     </div>
 
-                    <!-- Cụm Đăng nhập Vân tay & Quên mật khẩu -->
-                    <div class="flex justify-between items-center mb-6">
+                    <!-- ============================================================
+                         DA BO NUT VAN TAY.
+                         No chi chay  alert('He thong dang mo cam bien van tay...')
+                         roi thoi - khong he cham vao cam bien nao. Ben Cai dat con
+                         te hon: bam vao thi doi 2 giay bang setTimeout roi bao
+                         "Da thiet lap dang nhap bang van tay!". Noi doi ve mot
+                         tinh nang BAO MAT thi hai hon la khong co no.
 
-                        <!-- Nút Đăng nhập Vân tay -->
-                        <button type="button"
-                            class="flex items-center gap-2 text-slate-600 hover:text-brand-primary transition-colors focus:outline-none p-1.5 -ml-1.5 rounded-lg active:scale-95 hover:bg-brand-primary/10 cursor-pointer"
-                            @click="alert('Hệ thống đang mở cảm biến vân tay/FaceID...')">
-                            <!-- Icon vân tay của Lucide -->
-                            <i data-lucide="fingerprint" class="w-7 h-7 text-brand-primary"></i>
-                            <span class="text-sm font-bold"></span>
-                        </button>
-
-                        <!-- Quên mật khẩu -->
-                        <a href="#" class="text-brand-primary font-bold text-sm hover:underline transition-all">
+                         Cong nghe that de lam viec nay la WebAuthn (passkey), va
+                         no BAT BUOC chay tren HTTPS. Trang nay dang o
+                         http://10.x.x.x:3000 nen trinh duyet chan thang.
+                         ============================================================ -->
+                    <div class="flex justify-end items-center mb-6">
+                        <button type="button" @click="showQuenMatKhau = true"
+                            class="text-brand-primary font-bold text-sm hover:underline transition-all">
                             Quên mật khẩu?
-                        </a>
+                        </button>
                     </div>
 
                     <!-- Nút Đăng Nhập -->
@@ -214,37 +216,78 @@
                         Đăng nhập
                     </button>
 
-                    <!-- Đường kẻ ngăn cách (Divider) -->
-                    <div class="flex items-center my-6 sm:my-8">
-                        <div class="flex-grow border-t border-slate-200"></div>
-                        <span class="px-4 text-xs sm:text-sm text-slate-400 font-semibold uppercase tracking-wider">Hoặc
-                            đăng nhập với</span>
-                        <div class="flex-grow border-t border-slate-200"></div>
-                    </div>
+                    <!-- ============================================================
+                         DA BO NUT "DANG NHAP VOI GOOGLE".
+                         No khong co @click - bam khong xay ra gi ca.
 
-                    <!-- Nút Đăng nhập Google -->
-                    <button type="button"
-                        class="w-full py-3.5 sm:py-4 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-700 rounded-xl text-sm sm:text-base font-bold flex justify-center items-center gap-3 transition-all active:scale-95 cursor-pointer">
-                        <!-- Icon Google SVG (Tích hợp trực tiếp để không cần file ảnh ngoài) -->
-                        <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
-                            <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                                <path fill="#4285F4"
-                                    d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z" />
-                                <path fill="#34A853"
-                                    d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z" />
-                                <path fill="#FBBC05"
-                                    d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z" />
-                                <path fill="#EA4335"
-                                    d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 41.939 C -8.804 39.869 -11.514 38.649 -14.754 38.649 C -19.444 38.649 -23.494 41.349 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z" />
-                            </g>
-                        </svg>
-                        Đăng nhập với Google
-                    </button>
+                         Muon lam that phai co mot du an tren Google Cloud, ma
+                         client, va mot dia chi chuyen huong duoc Google chap nhan.
+                         Google CHI nhan dia chi HTTPS (tru localhost), nen
+                         http://10.x.x.x:3000 se bi tu choi thang.
+
+                         Mot cai nut chet giua trang dang nhap con te hon la khong
+                         co nut nao: nguoi cham do an bam vao la lo ngay.
+                         Lam lai khi nao len VPS co ten mien va HTTPS.
+                         ============================================================ -->
 
                     <!-- Liên kết Đăng ký -->
                     <div class="text-center text-slate-500 text-sm sm:text-base font-medium mt-6 sm:mt-8">
                         Chưa có tài khoản? <a href="register.html"
                             class="text-brand-primary font-bold hover:underline transition-all">Đăng ký ngay</a>
+                    </div>
+                
+                    <!-- ============================================================
+                         QUEN MAT KHAU
+                         Khong co OTP va khong co email thi KHONG the tu dat lai mat
+                         khau mot cach an toan. "Nhap so dien thoai la doi duoc"
+                         nghia la ai biet so cua chu trai cung chiem duoc tai khoan -
+                         kem theo do la quyen bat tat guong oxy ngoai ao.
+
+                         He thong nay chay tren may cua chinh trai, nen duong dat lai
+                         mat khau dung dan la: ra may chu chay mot lenh.
+                         ============================================================ -->
+                    <div x-show="showQuenMatKhau" x-cloak
+                        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50"
+                        @click.self="showQuenMatKhau = false">
+                        <div class="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
+                            <div class="flex justify-between items-start mb-4">
+                                <h3 class="font-bold text-lg text-slate-800">Quên mật khẩu</h3>
+                                <button type="button" @click="showQuenMatKhau = false"
+                                    class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg">
+                                    <i data-lucide="x" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+
+                            <p class="text-sm text-slate-600 font-medium mb-4 leading-relaxed">
+                                Hệ thống chưa gửi được mã OTP qua tin nhắn, nên không thể tự đặt lại
+                                mật khẩu từ trang này. Cách đặt lại: <b class="text-slate-800">ra máy
+                                đang chạy server</b> và chạy một lệnh.
+                            </p>
+
+                            <div class="bg-slate-900 rounded-xl p-3.5 mb-3 overflow-x-auto">
+                                <code class="text-[12.5px] text-green-300 font-mono whitespace-pre">cd server
+node tools/doi-mat-khau.js 0123456789</code>
+                            </div>
+
+                            <p class="text-xs text-slate-500 font-medium mb-4 leading-relaxed">
+                                Thay số trên bằng số điện thoại của bạn. Lệnh sẽ in ra một mật khẩu
+                                tạm — đăng nhập xong nhớ vào Cài đặt đổi lại mật khẩu riêng. Xem
+                                danh sách tài khoản bằng
+                                <code class="bg-slate-100 px-1 rounded">--list</code>.
+                            </p>
+
+                            <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+                                <p class="text-[12px] text-amber-800 font-medium leading-relaxed">
+                                    Đổi xong thì <b>mọi máy đang đăng nhập đều bị đăng xuất</b> — đó
+                                    chính là mục đích của việc đổi mật khẩu.
+                                </p>
+                            </div>
+
+                            <button type="button" @click="showQuenMatKhau = false"
+                                class="w-full py-3 bg-brand-primary hover:bg-brand-primaryHover text-white font-bold rounded-xl transition-colors active:scale-95">
+                                Đã hiểu
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>

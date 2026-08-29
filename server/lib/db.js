@@ -613,6 +613,7 @@ function createSqliteImpl() {
 
         // ---- TAI KHOAN ----
         userByPhone: db.prepare('SELECT * FROM users WHERE phone = ?'),
+        userAll: db.prepare('SELECT id, phone, name, role, created_at FROM users ORDER BY id'),
         userById: db.prepare('SELECT * FROM users WHERE id = ?'),
         userInsert: db.prepare(`INSERT INTO users (phone, name, role, avatar, pass_salt, pass_hash, created_at)
             VALUES (?,?,?,?,?,?,?)`),
@@ -902,6 +903,7 @@ function createSqliteImpl() {
 
         // ================= TAI KHOAN =================
         userByPhone: phone => q.userByPhone.get(phone) || null,
+        userList: () => q.userAll.all(),
         userById: id => q.userById.get(id) || null,
         userCreate(u) {
             const info = q.userInsert.run(u.phone, u.name, u.role, u.avatar || null,
@@ -1290,6 +1292,7 @@ function createJsonImpl() {
 
         // ================= TAI KHOAN =================
         userByPhone: phone => data.users.find(u => u.phone === phone) || null,
+        userList: () => data.users.map(u => ({ id: u.id, phone: u.phone, name: u.name, role: u.role, created_at: u.created_at })),
         userById: id => data.users.find(u => u.id === id) || null,
         userCreate(u) {
             const id = ++data.seq.user;
