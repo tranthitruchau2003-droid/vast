@@ -5,6 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>VAST - Smart Shrimp Farm 4.0</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#16a34a">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -57,10 +59,12 @@
          So ?v= phia sau la de ep trinh duyet nap ban MOI, khong dung ban cu
          trong bo nho dem. Moi lan sua js/iot.js hay doi so nay len 1 don vi. -->
     <script src="js/vast-config.js?v=5"></script>
-    <script src="js/iot.js?v=7"></script>
+    <script src="js/device-auth.js?v=1"></script>
+    <script src="js/iot.js?v=8"></script>
     <script src="js/market.js?v=4"></script>
-    <script src="js/feed.js?v=1"></script>
-    <script src="js/store.js?v=5"></script>
+    <script src="js/feed.js?v=4"></script>
+    <script src="js/store.js?v=8"></script>
+    <script src="js/push.js?v=1"></script>
     <script src="js/ai.js?v=1"></script>
 
     <script>
@@ -170,8 +174,19 @@
                     <!-- Tiêu đề và nút 3 chấm -->
                     <!-- Tiêu đề, nút QR và nút 3 chấm -->
                     <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
-                        <h2 class="text-base sm:text-xl md:text-2xl font-black text-slate-800 tracking-tight truncate"
-                            x-text="selectedPond ? 'CHI TIẾT ' + selectedPond.name.toUpperCase() : ''"></h2>
+                        <div class="min-w-0">
+                            <h2 class="text-base sm:text-xl md:text-2xl font-black text-slate-800 tracking-tight truncate"
+                                x-text="selectedPond ? 'CHI TIẾT ' + selectedPond.name.toUpperCase() : ''"></h2>
+                            <div class="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold">
+                                <span class="font-mono text-slate-500"
+                                    x-text="selectedPond ? 'Mã ao: ' + selectedPond.pond_id : ''"></span>
+                                <span class="px-2 py-0.5 rounded-full border"
+                                    :class="selectedPond?.cycle_status === 'empty'
+                                        ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                        : 'bg-cyan-50 text-cyan-700 border-cyan-200'"
+                                    x-text="selectedPond?.cycle_status === 'empty' ? 'AO TRỐNG' : 'ĐANG NUÔI'"></span>
+                            </div>
+                        </div>
 
                         <div class="flex items-center gap-2">
                             <!-- Nút Trích xuất QR -->
@@ -193,6 +208,11 @@
                                     <button @click="openMenu = false; openEditPondModal()"
                                         class="w-full px-4 py-2.5 text-left text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-2">
                                         <i data-lucide="edit-3" class="w-4 h-4 text-green-600"></i> Sửa thông tin ao
+                                    </button>
+                                    <button x-show="selectedPond?.cycle_status !== 'empty'"
+                                        @click="openMenu = false; openHarvestModal()"
+                                        class="w-full px-4 py-2.5 text-left text-sm font-bold text-amber-700 hover:bg-amber-50 flex items-center gap-2">
+                                        <i data-lucide="package-check" class="w-4 h-4"></i> Ghi nhận thu hoạch
                                     </button>
                                     <button @click="openMenu = false; showDeleteConfirmModal = true"
                                         class="w-full px-4 py-2.5 text-left text-sm font-bold text-red-600 hover:bg-red-50 flex items-center gap-2">
@@ -320,11 +340,18 @@
                                                 :class="feedStockBarClass()"
                                                 :style="'width: ' + (feedStockPct() ?? 0) + '%'"></div>
                                         </div>
-                                        <div class="flex justify-between items-center">
+                                        <div class="flex justify-between items-center gap-2">
                                             <span class="text-[11px] font-semibold" :class="feedDaysLeftClass()"
                                                 x-text="feedDaysLeftText()"></span>
-                                            <p class="text-xs text-slate-500 font-medium">Còn <span
-                                                    class="font-bold text-slate-700" x-text="feedStockText()"></span></p>
+                                            <div class="flex items-center gap-2 shrink-0">
+                                                <p class="text-xs text-slate-500 font-medium">Còn <span
+                                                        class="font-bold text-slate-700" x-text="feedStockText()"></span></p>
+                                                <button @click="feedOpenRefill()"
+                                                    class="px-2 py-1 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 text-[11px] font-bold rounded-lg active:scale-95 transition flex items-center gap-1">
+                                                    <i data-lucide="package-plus" class="w-3.5 h-3.5"></i>
+                                                    Nạp cám
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -580,6 +607,34 @@
             </template>
         </div>
 
+        <!-- YÊU CẦU CHUYỂN QUYỀN SANG THIẾT BỊ MỚI -->
+        <div x-show="loginRequests.length" x-cloak
+            class="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div class="p-6 bg-amber-50 border-b border-amber-200">
+                    <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mb-3">
+                        <i data-lucide="shield-alert" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="text-xl font-black text-slate-800">Thiết bị khác muốn đăng nhập</h3>
+                    <p class="text-sm text-slate-600 font-medium mt-2">
+                        <b x-text="loginRequests[0]?.device_name || 'Thiết bị mới'"></b> đang yêu cầu dùng tài khoản này.
+                    </p>
+                </div>
+                <div class="p-6">
+                    <div class="p-3 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-800 font-semibold">
+                        Nếu đồng ý, thiết bị này sẽ đăng xuất ngay. Máy tính vẫn không bị ảnh hưởng khi bạn chỉ chuyển điện thoại, và ngược lại.
+                    </div>
+                    <p class="text-xs text-slate-500 mt-3">Chỉ đồng ý khi chính bạn vừa thực hiện đăng nhập trên thiết bị mới.</p>
+                    <div class="grid grid-cols-2 gap-3 mt-5">
+                        <button @click="storeDecideLoginRequest(loginRequests[0].request_id, false)"
+                            class="py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold">Từ chối</button>
+                        <button @click="storeDecideLoginRequest(loginRequests[0].request_id, true)"
+                            class="py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold">Đồng ý & đăng xuất</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
 
 
 
@@ -598,20 +653,76 @@
                 </div>
                 <div class="p-6 space-y-5">
                     <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-2">Mã ao nuôi</label>
+                        <input type="text" :value="selectedPond?.pond_id || ''" readonly
+                            class="w-full p-4 bg-slate-100 border-2 border-slate-200 rounded-2xl font-mono font-bold text-slate-600 cursor-not-allowed">
+                        <p class="mt-1.5 text-xs font-medium text-slate-400">Mã do hệ thống tạo để không bị trùng và không thể chỉnh sửa.</p>
+                    </div>
+                    <div>
                         <label class="block text-sm font-bold text-slate-600 mb-2">Tên ao mới</label>
                         <input type="text" x-model="editPondName"
                             class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 font-bold text-lg">
                     </div>
                     <div>
-                        <label class="block text-sm font-bold text-slate-600 mb-2">Ngày thả tôm (Dự báo)</label>
+                        <label class="block text-sm font-bold text-slate-600 mb-2"
+                            x-text="selectedPond?.cycle_status === 'empty' ? 'Ngày thả tôm của vụ mới' : 'Ngày thả tôm (Dự báo)'"></label>
                         <input type="date" x-model="editStockingDate"
                             class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 font-bold text-lg">
+                        <p x-show="selectedPond?.cycle_status === 'empty'" class="mt-1.5 text-xs font-medium text-cyan-700">
+                            Chọn ngày thả mới rồi lưu để chuyển ao sang “Đang nuôi”.
+                        </p>
                     </div>
                 </div>
                 <div class="p-6 flex gap-4 bg-slate-50">
-                    <button @click="savePondSettings()"
-                        class="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-lg active:scale-95">
-                        Lưu thông tin
+                    <button @click="savePondSettings()" :disabled="store.saving"
+                        class="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-2xl shadow-lg active:scale-95 disabled:opacity-60">
+                        <span x-text="store.saving ? 'Đang lưu...' : 'Lưu thông tin'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL GHI NHẬN THU HOẠCH -->
+        <div x-show="showHarvestModal"
+            class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+            style="display: none;">
+            <div @click.away="if (!store.saving) showHarvestModal = false"
+                class="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-amber-50/60">
+                    <div>
+                        <h3 class="font-bold text-xl text-slate-800">Ghi nhận thu hoạch</h3>
+                        <p class="text-xs font-mono font-bold text-slate-500 mt-1"
+                            x-text="selectedPond?.pond_id || ''"></p>
+                    </div>
+                    <button @click="showHarvestModal = false" :disabled="store.saving"
+                        class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full disabled:opacity-50">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-sm font-semibold text-amber-800">
+                        Sau khi xác nhận, vụ nuôi kết thúc và trạng thái ao sẽ chuyển thành <b>Ao trống</b>.
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Ngày giờ thu hoạch <span class="text-red-500">*</span></label>
+                        <input type="datetime-local" x-model="harvestAt"
+                            class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Sản lượng (kg) <span class="text-red-500">*</span></label>
+                        <input type="number" min="0.1" step="0.1" x-model="harvestQuantity" placeholder="Ví dụ: 2500"
+                            class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-600 mb-1">Mã lô thu hoạch</label>
+                        <input type="text" maxlength="60" x-model="harvestLotCode" placeholder="Ví dụ: LO-A1-082026"
+                            class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold">
+                    </div>
+                </div>
+                <div class="p-6 bg-slate-50">
+                    <button @click="confirmHarvest()" :disabled="store.saving"
+                        class="w-full py-4 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-2xl shadow-lg active:scale-95 disabled:opacity-60">
+                        <span x-text="store.saving ? 'Đang ghi nhận...' : 'Xác nhận thu hoạch'"></span>
                     </button>
                 </div>
             </div>
@@ -909,6 +1020,19 @@
                         class="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-bold text-lg"
                         placeholder="Nhập tên hiển thị">
                 </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-slate-600 mb-2">Email khôi phục mật khẩu</label>
+                    <div class="relative flex items-center">
+                        <i data-lucide="mail" class="absolute left-4 w-5 h-5 text-slate-400"></i>
+                        <input type="email" x-model.trim="editEmail" autocomplete="email"
+                            class="w-full p-4 pl-12 bg-white border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-green-500 focus:ring-4 focus:ring-green-50 transition-all text-slate-800 font-semibold"
+                            placeholder="Ví dụ: ban@gmail.com" required>
+                    </div>
+                    <p class="mt-1.5 text-[11px] text-slate-500 font-medium leading-relaxed">
+                        Email này dùng để nhận mã OTP khi bạn quên mật khẩu. Mỗi email chỉ dùng cho một tài khoản.
+                    </p>
+                </div>
             </div>
             <div class="p-6 flex gap-4 bg-slate-50">
                 <button @click="showEditProfileModal = false"
@@ -1126,6 +1250,7 @@
                             class="text-red-500">*</span></label>
                     <input type="text" x-model="newPondName" placeholder="Ví dụ: Ao số 3"
                         class="w-full p-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-base">
+                    <p class="mt-1.5 text-xs font-medium text-slate-400">Mã ao nuôi sẽ được hệ thống tự tạo sau khi lưu.</p>
                 </div>
                 <div>
                     <label class="block text-sm font-bold text-slate-600 mb-1">Diện tích ao nuôi (m²) <span
@@ -1706,6 +1831,10 @@
                     <label class="block text-sm font-bold text-slate-700 mb-2">Sức chứa thùng cám (kg)</label>
                     <input type="number" min="1" x-model="feed.setupStockMaxKg" placeholder="Ví dụ: 15"
                         class="w-full p-3.5 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-amber-500 font-bold text-slate-800">
+                    <p class="text-[11px] text-slate-500 font-medium mt-2">
+                        Đây là dung tích tối đa của thùng. Sau khi lưu, dùng nút <b>Nạp cám</b> trên thẻ Máy cho ăn
+                        để ghi số kg cám thực tế vừa đổ vào.
+                    </p>
 
                     <label class="block text-sm font-bold text-slate-700 mb-2 mt-4">Giờ cho ăn trong ngày</label>
                     <input type="text" x-model="feed.setupMealTimes" placeholder="06:00, 10:00, 14:00, 18:00"
@@ -1735,6 +1864,84 @@
                 </button>
             </div>
         </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: NẠP CÁM VÀO THÙNG                                    -->
+    <!-- Ghi SO KG VUA DO THEM, server se cong vao ton kho hien tai. -->
+    <!-- ============================================================ -->
+    <div x-show="feed.showRefillModal" x-cloak
+        class="fixed inset-0 z-[260] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+        style="display: none;">
+        <form novalidate @submit.prevent="feedSubmitRefill()" @click.away="feed.showRefillModal = false"
+            class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl"
+            x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95"
+            x-transition:enter-end="opacity-100 scale-100">
+
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-green-50">
+                <h3 class="font-bold text-lg text-green-800 flex items-center gap-2">
+                    <i data-lucide="package-plus" class="w-5 h-5 text-green-600"></i> Nạp cám vào thùng
+                </h3>
+                <button type="button" @click="feed.showRefillModal = false" :disabled="feed.refillBusy"
+                    class="text-slate-400 hover:text-red-500 bg-white shadow-sm p-2 rounded-full disabled:opacity-50">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-wide">Đang có</p>
+                        <p class="text-lg font-black text-slate-800 mt-1">
+                            <span x-text="feedNum(feedPlan(feed.refillPondId)?.feedStockKg || 0)"></span>
+                            <span class="text-sm text-slate-500">kg</span>
+                        </p>
+                    </div>
+                    <div class="p-3.5 bg-green-50 border border-green-100 rounded-2xl">
+                        <p class="text-[10px] font-black text-green-600 uppercase tracking-wide">Còn chứa được</p>
+                        <p class="text-lg font-black text-green-800 mt-1">
+                            <span x-text="feedNum(feedRefillRemainingKg())"></span>
+                            <span class="text-sm text-green-600">kg</span>
+                        </p>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center gap-3 mb-2">
+                        <label for="feed-refill-amount" class="block text-sm font-bold text-slate-700">
+                            Số cám vừa đổ thêm (kg)
+                        </label>
+                        <button type="button" @click="feedRefillToMax()"
+                            class="text-xs font-bold text-green-700 hover:text-green-800 hover:underline">
+                            Đổ đầy thùng
+                        </button>
+                    </div>
+                    <div class="relative">
+                        <input id="feed-refill-amount" type="number" min="0.1" step="0.1"
+                            :max="feedRefillRemainingKg() ?? 10000" x-model="feed.refillAmountKg"
+                            @input="feed.refillError = ''" placeholder="Ví dụ: 25"
+                            class="w-full p-4 pr-14 bg-white border-2 rounded-xl focus:outline-none font-black text-xl text-slate-800 transition-colors"
+                            :class="feed.refillError ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-green-500'">
+                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">kg</span>
+                    </div>
+                    <p class="text-xs text-red-600 font-bold mt-2" x-show="feed.refillError" x-text="feed.refillError"></p>
+                    <p class="text-[11px] text-slate-500 font-medium mt-2 leading-relaxed">
+                        Chỉ nhập lượng cám <b>vừa đổ thêm</b>. Hệ thống sẽ tự cộng vào số đang có trong thùng.
+                    </p>
+                </div>
+            </div>
+
+            <div class="p-5 flex gap-3 bg-slate-50 border-t border-slate-100">
+                <button type="button" @click="feed.showRefillModal = false" :disabled="feed.refillBusy"
+                    class="flex-1 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold rounded-xl transition-all active:scale-95 disabled:opacity-50">
+                    Hủy
+                </button>
+                <button type="submit" :disabled="feed.refillBusy"
+                    class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-md shadow-green-200 active:scale-95 transition-all disabled:opacity-50"
+                    x-text="feed.refillBusy ? 'Đang lưu...' : 'Xác nhận nạp'">
+                </button>
+            </div>
+        </form>
     </div>
 
     <!-- MODAL CẬP NHẬT GIÁ ĐIỆN -->
@@ -1899,13 +2106,18 @@
                 // Biến trạng thái Modal
                 showEditProfileModal: false,
                 editName: '',
+                editEmail: '',
 
                 editAvatar: '',
                 showEditPondModal: false,
+                showHarvestModal: false,
                 showDeleteConfirmModal: false,
                 showLogoutConfirmModal: false,
                 editPondName: '',
                 editStockingDate: '',
+                harvestAt: '',
+                harvestQuantity: '',
+                harvestLotCode: '',
                 showAllLogsModal: false,
                 showQRModal: false,
                 showAILogsModal: false,
@@ -1965,7 +2177,7 @@
                 // Biến Nhật ký AI
                 aiLogs: [],
 
-                user: { name: '', role: '', avatar: '', phone: '' },
+                user: { name: '', role: '', avatar: '', phone: '', email: '' },
                 toasts: [],
                 alerts: [],
 
@@ -2076,6 +2288,57 @@
                 },
                 get totalExpense() {
                     return this.transactions.filter(t => t.type === 'chi').reduce((sum, t) => sum + t.amount, 0);
+                },
+                financeExpenseBreakdown() {
+                    const totals = new Map();
+                    for (const txn of this.transactions || []) {
+                        if (txn.type !== 'chi') continue;
+                        const name = String(txn.category || 'Khác').trim() || 'Khác';
+                        const amount = Number(txn.amount) || 0;
+                        if (amount > 0) totals.set(name, (totals.get(name) || 0) + amount);
+                    }
+
+                    const preferredColors = {
+                        'Thức ăn': '#795548',
+                        'Con giống': '#f4c542',
+                        'Thuốc men': '#06b6d4',
+                        'Hóa chất & xử lý nước': '#14b8a6',
+                        'Nhân công': '#3b82f6',
+                        'Thiết bị': '#8b5cf6',
+                        'Khác': '#9ca3af',
+                    };
+                    const palette = ['#ef4444', '#f97316', '#84cc16', '#0ea5e9', '#6366f1', '#d946ef'];
+                    const total = [...totals.values()].reduce((sum, value) => sum + value, 0);
+                    const items = [...totals.entries()]
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([name, amount], index) => ({
+                            name,
+                            amount,
+                            percent: total ? amount * 100 / total : 0,
+                            color: preferredColors[name] || palette[index % palette.length],
+                        }));
+
+                    let cursor = 0;
+                    const slices = items.map(item => {
+                        const start = cursor;
+                        cursor += item.percent;
+                        return `${item.color} ${start.toFixed(3)}% ${cursor.toFixed(3)}%`;
+                    });
+                    return {
+                        total,
+                        items,
+                        gradient: slices.length ? `conic-gradient(${slices.join(',')})` : '#e2e8f0',
+                    };
+                },
+                financeCompactAmount(amount) {
+                    const value = Number(amount) || 0;
+                    if (value >= 1000000000) {
+                        return (value / 1000000000).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' tỷ đồng';
+                    }
+                    if (value >= 1000000) {
+                        return (value / 1000000).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' triệu đồng';
+                    }
+                    return this.formatNumber(value) + ' đ';
                 },
                 get totalElectricityCost() {
                     return Math.round(this.totalKwhConsumed * this.electricityPrice);
@@ -2208,6 +2471,7 @@
                 openProfileModal() {
                     // Tự động lấy tên người dùng từ lúc Đăng ký
                     this.editName = this.user.name;
+                    this.editEmail = this.user.email || '';
                     this.editAvatar = this.user.avatar || '';
                     this.showEditProfileModal = true;
                 },
@@ -2230,12 +2494,18 @@
                         this.showErrorModal = true;
                         return;
                     }
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.editEmail)) {
+                        this.errorMessage = 'Vui lòng nhập email hợp lệ để có thể lấy lại mật khẩu.';
+                        this.showErrorModal = true;
+                        return;
+                    }
 
                     // Luu len SERVER. Dang nhap tu dien thoai khac cung thay
                     // ten va anh moi - truoc day chi doi tren dung may nay.
                     const xong = await this.storeSaveProfile({
                         name: this.editName,
                         avatar: this.editAvatar,
+                        email: this.editEmail,
                     });
                     if (!xong) return;
 
@@ -2272,17 +2542,59 @@
                 openEditPondModal() {
                     if (this.selectedPond) {
                         this.editPondName = this.selectedPond.name;
-                        this.editStockingDate = this.selectedPond.stockingDate || '';
+                        // Ao trong van giu ngay tha cu trong ho so. De trong o
+                        // day de nguoi dung chu dong chon ngay bat dau VU MOI.
+                        this.editStockingDate = this.selectedPond.cycle_status === 'empty'
+                            ? ''
+                            : (this.selectedPond.stockingDate || '');
                         this.showEditPondModal = true;
                     }
                 },
-                savePondSettings() {
+                async savePondSettings() {
                     if (this.editPondName.trim() === '') { alert('Vui lòng không để trống tên ao!'); return; }
                     if (this.selectedPond) {
-                        this.selectedPond.name = this.editPondName; this.selectedPond.stockingDate = this.editStockingDate;
-                        this.showEditPondModal = false; this.showToast('Đã cập nhật thông tin thành công!');
+                        const thayDoi = { name: this.editPondName.trim() };
+                        if (this.selectedPond.cycle_status !== 'empty' || this.editStockingDate) {
+                            thayDoi.stocking_date = this.editStockingDate;
+                        }
+                        const ok = await this.storeUpdatePond(this.selectedPond.pond_id, thayDoi);
+                        if (!ok) return;
+                        this.showEditPondModal = false;
+                        this.showToast('Đã cập nhật thông tin thành công!');
                         this.$nextTick(() => lucide.createIcons());
                     }
+                },
+
+                openHarvestModal() {
+                    if (!this.selectedPond || this.selectedPond.cycle_status === 'empty') return;
+                    const now = new Date();
+                    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+                    this.harvestAt = local.toISOString().slice(0, 16);
+                    this.harvestQuantity = '';
+                    this.harvestLotCode = '';
+                    this.showHarvestModal = true;
+                    this.$nextTick(() => lucide.createIcons());
+                },
+
+                async confirmHarvest() {
+                    if (!this.selectedPond) return;
+                    if (!this.harvestAt) {
+                        this.showToast('Vui lòng nhập ngày giờ thu hoạch', 'error');
+                        return;
+                    }
+                    if (!(Number(this.harvestQuantity) > 0)) {
+                        this.showToast('Vui lòng nhập sản lượng thu hoạch hợp lệ', 'error');
+                        return;
+                    }
+                    const d = await this.storeHarvestPond(this.selectedPond.pond_id, {
+                        harvested_at: this.harvestAt,
+                        quantity_kg: Number(this.harvestQuantity),
+                        lot_code: this.harvestLotCode.trim() || null,
+                    });
+                    if (!d) return;
+                    this.showHarvestModal = false;
+                    this.showToast('Đã ghi nhận thu hoạch. Trạng thái ao: Trống', 'success');
+                    this.$nextTick(() => lucide.createIcons());
                 },
 
                 async addNewPond() {

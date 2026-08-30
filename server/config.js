@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+require('./lib/env');
 
 const DEFAULTS = {
     // Cong chay web + API
@@ -37,6 +38,13 @@ const DEFAULTS = {
     // khoang 8.600 dong/ngay - rat nhe voi SQLite.
     // Muon tiet kiem dung luong hon nua (chay dai han) thi tang len 30-60.
     historySampleSeconds: 10,
+
+    // Tai khoan duoc vao trang ho tro khoi phuc. Chi so dien thoai nam trong
+    // bien moi truong VAST_ADMIN_PHONES moi co quyen; truong "role" cua ho so
+    // khong duoc dung lam quyen quan tri vi nguoi dung co the tu sua role.
+    auth: {
+        adminPhones: [],
+    },
 
     // Nguong canh bao (dung chung voi ESP32 - de website giai thich cho nguoi dung).
     // LUU Y: logic BAT/TAT relay that su chay TREN ESP32, khong phu thuoc server.
@@ -187,5 +195,9 @@ if (process.env.DEVICE_OFFLINE_SECONDS) config.deviceOfflineSeconds = parseInt(p
 if (process.env.HISTORY_SAMPLE_SECONDS) config.historySampleSeconds = parseInt(process.env.HISTORY_SAMPLE_SECONDS, 10);
 if (process.env.MARKET_REFRESH_MINUTES) config.market.refreshMinutes = parseInt(process.env.MARKET_REFRESH_MINUTES, 10);
 if (process.env.MARKET_ADMIN_TOKEN) config.market.adminToken = process.env.MARKET_ADMIN_TOKEN;
+if (process.env.VAST_ADMIN_PHONES) {
+    config.auth.adminPhones = String(process.env.VAST_ADMIN_PHONES)
+        .split(',').map(x => x.trim()).filter(Boolean);
+}
 
 module.exports = config;

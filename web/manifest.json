@@ -1,8 +1,12 @@
 {
     "name": "Vietnam AI Smart Tracking",
     "short_name": "VAST",
-    "start_url": "./index.html",
+    "id": "/",
+    "start_url": "/dashboard.html",
+    "scope": "/",
     "display": "standalone",
+    "display_override": ["standalone", "minimal-ui"],
+    "description": "Quản lý ao nuôi và nhận cảnh báo nguy hiểm VAST",
     "background_color": "#D8EADF",
     "theme_color": "#2A8B47",
     "icons": [

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>VAST hỗ trợ khôi phục</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="js/vast-config.js?v=5"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        body { font-family: Inter, Arial, sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-100 p-4" x-data="page()">
+<main class="max-w-2xl mx-auto py-5">
+    <a href="forgot-password.html" class="font-bold text-green-700">← Quay lại</a>
+    <section class="bg-white mt-5 rounded-3xl border p-6 sm:p-9">
+        <img src="assets/logo.png" class="h-14 mx-auto" alt="VAST">
+        <h1 class="text-2xl font-black text-center mt-4">VAST hỗ trợ khôi phục</h1>
+        <p class="text-sm text-slate-500 text-center mt-2">
+            Dùng khi bạn đã mất Gmail, thiết bị đăng nhập và mã dự phòng.
+        </p>
+
+        <div class="flex bg-slate-100 rounded-xl p-1 mt-6">
+            <button @click="tab='request'" class="flex-1 p-3 rounded-lg font-bold"
+                :class="tab==='request'?'bg-white shadow':''">Gửi yêu cầu</button>
+            <button @click="tab='finish'" class="flex-1 p-3 rounded-lg font-bold"
+                :class="tab==='finish'?'bg-white shadow':''">Theo dõi / hoàn tất</button>
+        </div>
+
+        <div x-show="msg" x-cloak class="mt-5 p-4 rounded-xl font-semibold"
+            :class="err?'bg-red-50 text-red-700':'bg-green-50 text-green-800'" x-text="msg"></div>
+
+        <form x-show="tab==='request'" @submit.prevent="request" class="space-y-4 mt-6">
+            <label class="block font-bold">
+                Số điện thoại đăng nhập
+                <input x-model.trim="phone" inputmode="tel" class="block w-full mt-2 p-4 border-2 rounded-xl" required>
+            </label>
+            <label class="block font-bold">
+                Gmail mới để nhận mã
+                <input x-model.trim="newEmail" type="email" class="block w-full mt-2 p-4 border-2 rounded-xl" required>
+            </label>
+
+            <div>
+                <p class="font-black">Bạn muốn xác minh bằng cách nào?</p>
+                <div class="grid sm:grid-cols-3 gap-3 mt-3">
+                    <template x-for="option in preferenceOptions" :key="option.value">
+                        <button type="button" @click="preference=option.value"
+                            class="p-4 rounded-2xl border-2 text-left font-bold"
+                            :class="preference===option.value
+                                ? 'border-green-600 bg-green-50 text-green-900'
+                                : 'border-slate-200 bg-white'"
+                            x-text="option.label"></button>
+                    </template>
+                </div>
+            </div>
+
+            <details class="p-4 rounded-2xl bg-blue-50 border border-blue-200 text-blue-900">
+                <summary class="font-black cursor-pointer">Tôi còn một mã ao hoặc mã thiết bị (không bắt buộc)</summary>
+                <p class="text-sm mt-2">
+                    Hộ có nhiều ao chỉ cần nhập một mã bất kỳ. Không cần khai toàn bộ danh sách ao.
+                </p>
+                <div class="grid sm:grid-cols-2 gap-4 mt-4">
+                    <label class="block font-bold">
+                        Một mã ao (nếu còn)
+                        <input x-model.trim="pondCode" class="block w-full mt-2 p-4 border-2 rounded-xl bg-white"
+                            placeholder="Ví dụ AO-001">
+                    </label>
+                    <label class="block font-bold">
+                        Một mã thiết bị (nếu còn)
+                        <input x-model.trim="deviceCode" class="block w-full mt-2 p-4 border-2 rounded-xl bg-white"
+                            placeholder="Trên tem hoặc hộp VAST">
+                    </label>
+                </div>
+            </details>
+
+            <label class="block font-bold">
+                Ghi chú cho Admin (không bắt buộc)
+                <textarea x-model.trim="note" class="block w-full mt-2 p-4 border-2 rounded-xl" rows="3"
+                    placeholder="Ví dụ: Thời gian thuận tiện để liên hệ..."></textarea>
+            </label>
+
+            <p class="text-sm text-amber-800 bg-amber-50 border border-amber-200 p-4 rounded-xl">
+                Nhân viên VAST không bao giờ hỏi mật khẩu hoặc mã OTP của bạn.
+                Khi không có mã thiết bị, Admin sẽ yêu cầu gọi video, gặp trực tiếp hoặc đối chiếu giấy tờ.
+            </p>
+            <button :disabled="busy"
+                class="w-full p-4 bg-green-700 text-white rounded-xl font-black disabled:opacity-50"
+                x-text="busy?'Đang gửi...':'Gửi yêu cầu xác minh'"></button>
+        </form>
+
+        <div x-show="tab==='finish'" x-cloak class="mt-6 space-y-4">
+            <label class="block font-bold">
+                Mã hồ sơ
+                <input x-model.trim="requestId" class="block w-full mt-2 p-4 border-2 rounded-xl uppercase"
+                    placeholder="RCV-...">
+            </label>
+            <button @click="check" :disabled="busy"
+                class="w-full p-3 border-2 border-green-700 text-green-700 rounded-xl font-black">
+                Kiểm tra trạng thái
+            </button>
+            <div x-show="status" class="p-4 bg-slate-50 rounded-xl">
+                <b>Trạng thái: </b><span x-text="statusLabel()"></span>
+            </div>
+            <template x-if="status==='approved'">
+                <form @submit.prevent="complete" class="space-y-4 border-t pt-5">
+                    <p class="text-sm text-green-800 font-semibold">
+                        Yêu cầu đã được duyệt. Nhập mã 8 số gửi đến Gmail mới.
+                    </p>
+                    <input x-model.trim="otp" inputmode="numeric" maxlength="8"
+                        class="w-full p-4 border-2 rounded-xl text-center text-xl tracking-[.3em] font-black"
+                        placeholder="00000000">
+                    <input type="password" x-model="password" class="w-full p-4 border-2 rounded-xl"
+                        placeholder="Mật khẩu mới">
+                    <input type="password" x-model="confirm" class="w-full p-4 border-2 rounded-xl"
+                        placeholder="Nhập lại mật khẩu">
+                    <button :disabled="busy" class="w-full p-4 bg-green-700 text-white rounded-xl font-black">
+                        Hoàn tất khôi phục
+                    </button>
+                </form>
+            </template>
+        </div>
+    </section>
+</main>
+
+<script>
+function page() {
+    return {
+        tab: 'request',
+        phone: '',
+        newEmail: '',
+        pondCode: '',
+        deviceCode: '',
+        preference: 'video',
+        note: '',
+        requestId: '',
+        status: '',
+        otp: '',
+        password: '',
+        confirm: '',
+        busy: false,
+        msg: '',
+        err: false,
+        preferenceOptions: [
+            { value: 'video', label: 'Gọi video tại ao' },
+            { value: 'documents', label: 'Gửi giấy tờ / hóa đơn' },
+            { value: 'direct', label: 'Gặp trực tiếp' }
+        ],
+        preferenceLabel() {
+            return this.preferenceOptions.find(option => option.value === this.preference)?.label || '';
+        },
+        api(path) {
+            return (window.VAST_CONFIG?.API_BASE || '').replace(/\/$/, '') + path;
+        },
+        async post(path, body) {
+            const response = await fetch(this.api(path), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'Có lỗi xảy ra');
+            return data;
+        },
+        async request() {
+            this.busy = true;
+            this.msg = '';
+            try {
+                const data = await this.post('/api/auth/recover/support/request', {
+                    phone: this.phone,
+                    newEmail: this.newEmail,
+                    pondCode: this.pondCode,
+                    deviceCode: this.deviceCode,
+                    note: 'Đề nghị xác minh: ' + this.preferenceLabel()
+                        + (this.note ? '. ' + this.note : '')
+                });
+                this.requestId = data.request_id;
+                this.tab = 'finish';
+                this.status = 'pending';
+                this.err = false;
+                this.msg = data.message + ' Mã hồ sơ: ' + data.request_id;
+            } catch (error) {
+                this.err = true;
+                this.msg = error.message;
+            } finally {
+                this.busy = false;
+            }
+        },
+        async check() {
+            this.busy = true;
+            this.msg = '';
+            try {
+                const data = await this.post('/api/auth/recover/support/status', { requestId: this.requestId });
+                this.status = data.status;
+                this.err = false;
+                this.msg = this.status === 'approved'
+                    ? 'Mã hoàn tất đã được gửi đến Gmail mới.'
+                    : 'Đã cập nhật trạng thái hồ sơ.';
+            } catch (error) {
+                this.err = true;
+                this.msg = error.message;
+            } finally {
+                this.busy = false;
+            }
+        },
+        statusLabel() {
+            return ({
+                pending: 'Đang chờ VAST xác minh',
+                approved: 'Đã duyệt — kiểm tra Gmail mới',
+                rejected: 'Chưa đủ thông tin xác minh',
+                completed: 'Đã khôi phục thành công'
+            })[this.status] || this.status;
+        },
+        async complete() {
+            if (this.password.length < 6 || this.password !== this.confirm) {
+                this.err = true;
+                this.msg = 'Mật khẩu phải từ 6 ký tự và hai lần nhập phải giống nhau.';
+                return;
+            }
+            this.busy = true;
+            try {
+                await this.post('/api/auth/recover/support/complete', {
+                    requestId: this.requestId,
+                    code: this.otp,
+                    newPassword: this.password
+                });
+                this.status = 'completed';
+                this.err = false;
+                this.msg = 'Khôi phục thành công. Tất cả thiết bị cũ đã bị đăng xuất.';
+                setTimeout(() => location.href = 'login.html', 1800);
+            } catch (error) {
+                this.err = true;
+                this.msg = error.message;
+            } finally {
+                this.busy = false;
+            }
+        }
+    };
+}
+</script>
+</body>
+</html>

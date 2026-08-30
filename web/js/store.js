@@ -47,6 +47,7 @@ function storeModule() {
      */
     async function goiApi(duongDan, tuyChon = {}) {
         const headers = { ...(tuyChon.headers || {}) };
+        Object.assign(headers, window.VAST_DEVICE?.headers?.() || {});
         const token = layToken();
         if (token) headers['X-Session-Token'] = token;
         if (tuyChon.body) headers['Content-Type'] = 'application/json';
@@ -102,6 +103,8 @@ function storeModule() {
             error: '',
             lastSync: null,
         },
+        loginRequests: [],
+        _loginRequestTimer: null,
 
         /* ================= KHOI DONG ================= */
         async initStore() {
@@ -124,6 +127,7 @@ function storeModule() {
                     role: me.user.role,
                     avatar: me.user.avatar || '',
                     phone: me.user.phone,
+                    email: me.user.email || '',
                 };
 
                 this.storeApplySettings(me.settings || {});
@@ -131,6 +135,9 @@ function storeModule() {
 
                 this.store.serverOk = true;
                 this.store.ready = true;
+                await this.storePollLoginRequests();
+                clearInterval(this._loginRequestTimer);
+                this._loginRequestTimer = setInterval(() => this.storePollLoginRequests(), 5000);
                 return true;
 
             } catch (e) {
@@ -146,6 +153,38 @@ function storeModule() {
                 return false;
             } finally {
                 this.store.loading = false;
+            }
+        },
+
+        async storePollLoginRequests() {
+            try {
+                const d = await goiApi('/api/auth/device/requests');
+                this.loginRequests = d.requests || [];
+            } catch (e) {
+                if (e.needLogin) {
+                    datToken('');
+                    try { localStorage.setItem('vast_logout_reason', 'Thiết bị khác đã được cấp quyền. Phiên trên máy này đã đăng xuất để tránh điều khiển trùng.'); } catch { /* bo qua */ }
+                    window.location.href = 'login.html';
+                }
+            }
+        },
+
+        async storeDecideLoginRequest(requestId, approve) {
+            try {
+                const d = await goiApi('/api/auth/device/decision', {
+                    method: 'POST', body: { request_id: requestId, approve: !!approve },
+                });
+                this.loginRequests = this.loginRequests.filter(r => r.request_id !== requestId);
+                if (d.logout_current) {
+                    datToken('');
+                    try { localStorage.setItem('vast_logout_reason', 'Bạn đã chuyển quyền sang thiết bị mới. Thiết bị này đã đăng xuất.'); } catch { /* bo qua */ }
+                    window.location.href = 'login.html';
+                } else {
+                    this.showToast?.('Đã từ chối thiết bị mới', 'info');
+                }
+            } catch (e) {
+                this.showToast?.(e.message, 'error');
+                await this.storePollLoginRequests();
             }
         },
 
@@ -299,6 +338,24 @@ function storeModule() {
             }
         },
 
+        /** Ghi nhan ket thuc vu nuoi; backend se chuyen ao sang "empty". */
+        async storeHarvestPond(pondId, harvest) {
+            this.store.saving = true;
+            try {
+                const d = await goiApi('/api/trace/harvest', {
+                    method: 'POST',
+                    body: { pond_id: pondId, ...harvest },
+                });
+                await this.storeLoadPonds();
+                return d;
+            } catch (e) {
+                this.showToast?.(e.message, 'error');
+                return null;
+            } finally {
+                this.store.saving = false;
+            }
+        },
+
         async storeDeletePond(pondId) {
             this.store.saving = true;
             try {
@@ -417,10 +474,10 @@ function storeModule() {
         },
 
         /* ================= TAI KHOAN ================= */
-        async storeSaveProfile({ name, avatar, role }) {
+        async storeSaveProfile({ name, avatar, role, email }) {
             this.store.saving = true;
             try {
-                const d = await goiApi('/api/auth/profile', { method: 'POST', body: { name, avatar, role } });
+                const d = await goiApi('/api/auth/profile', { method: 'POST', body: { name, avatar, role, email } });
                 this.user = { ...this.user, ...d.user, avatar: d.user.avatar || '' };
                 return true;
             } catch (e) {

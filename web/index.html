@@ -133,56 +133,93 @@
             <div class="card-base text-center md:text-left grid gap-8 sm:gap-14">
                 <div class="flex flex-col items-center">
                     <!-- Thu nhỏ chữ trên màn hình nhỏ để tránh rớt dòng xấu -->
+                    <div class="inline-flex items-center gap-2 px-4 py-2 mb-5 rounded-full bg-green-50 border border-green-200 text-brand-primary text-xs sm:text-sm font-extrabold uppercase tracking-wide">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                        Tự động khép kín tại ao
+                    </div>
                     <h1
-                        class="text-2xl sm:text-4xl lg:text-5xl font-extrabold leading-tight mb-4 sm:mb-6 text-brand-textPrimary text-center">
-                        <span class="text-brand-primary">Nuôi Tôm 4.0:</span><br class="hidden sm:inline">Chấm Dứt Rủi
-                        Ro – Tối Ưu Lợi Nhuận
+                        class="text-3xl sm:text-4xl lg:text-6xl font-extrabold leading-tight mb-4 sm:mb-6 text-brand-textPrimary text-center max-w-5xl">
+                        Không chỉ cảnh báo.<br>
+                        <span class="text-brand-primary">VAST tự phản ứng để bảo vệ ao.</span>
                     </h1>
                     <p
                         class="text-sm sm:text-lg lg:text-xl text-brand-textSecondary mb-8 sm:mb-10 text-center max-w-3xl">
-                        Hệ thống Quản lý 4 Lớp: Ghi nhật ký bằng giọng nói, điều khiển tự động 24/7 và dự báo dịch bệnh
-                        bằng AI. Xây dựng riêng cho Nông Dân Việt.
+                        Cảm biến phát hiện bất thường, ESP32 quyết định ngay tại ao và điều khiển thiết bị theo ngưỡng an
+                        toàn — vẫn duy trì chế độ AUTO khi mạng chập chờn. Một hệ thống nối liền phần cứng, dữ liệu và
+                        hành động cho người nuôi tôm Việt.
                     </p>
-                    <a href="register.html"
-                        class="btn-primary !py-3 !px-8 !text-base !shadow-none hover:!translate-y-0">
-                        Khám Phá Mô Hình Thực Tế
-                    </a>
+                    <div class="flex flex-col sm:flex-row gap-3 justify-center">
+                        <a href="register.html"
+                            class="btn-primary !py-3 !px-8 !text-base !shadow-none hover:!translate-y-0">
+                            Trải nghiệm hệ thống
+                        </a>
+                        <a href="#closed-loop" class="btn-outline !py-3 !px-8 !text-base">
+                            Xem vòng lặp VAST
+                        </a>
+                    </div>
+
+                    <div class="mt-10 w-full max-w-5xl grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-3 text-left">
+                        <div class="p-4 rounded-2xl bg-blue-50 border border-blue-100">
+                            <div class="text-xs font-extrabold text-blue-600 uppercase mb-1">01 · Nhìn thấy</div>
+                            <div class="font-bold">DO, nhiệt độ, dòng điện</div>
+                        </div>
+                        <i data-lucide="arrow-right" class="hidden sm:block text-brand-primary"></i>
+                        <div class="p-4 rounded-2xl bg-amber-50 border border-amber-100">
+                            <div class="text-xs font-extrabold text-amber-600 uppercase mb-1">02 · Quyết định</div>
+                            <div class="font-bold">ESP32 xử lý tại ao</div>
+                        </div>
+                        <i data-lucide="arrow-right" class="hidden sm:block text-brand-primary"></i>
+                        <div class="p-4 rounded-2xl bg-green-50 border border-green-100">
+                            <div class="text-xs font-extrabold text-brand-primary uppercase mb-1">03 · Hành động</div>
+                            <div class="font-bold">Bật guồng, bơm, khóa cữ cám</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- 2. NỖI LO KHÁCH HÀNG -->
+    <!-- 2. BA KHÁC BIỆT CỐT LÕI -->
     <section class="py-10 sm:py-16">
         <div class="w-full max-w-[1280px] mx-auto px-4 sm:px-6">
-            <h2 class="section-title">Nỗi Lo Của Người Nuôi Tôm</h2>
+            <div class="text-center max-w-3xl mx-auto mb-10 sm:mb-12">
+                <p class="text-brand-primary font-extrabold uppercase tracking-wider text-xs sm:text-sm mb-3">Vì sao VAST khác biệt?</p>
+                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold">Ba giá trị cốt lõi, không phải ba tính năng rời rạc</h2>
+            </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="card-base !p-6 sm:!p-8 text-center rounded-md">
-                    <div class="problem-icon">
-                        <i data-lucide="zap-off" size="28"></i>
+                    <div class="problem-icon !bg-green-100 !text-brand-primary">
+                        <i data-lucide="refresh-cw" size="28"></i>
                     </div>
-                    <h3 class="text-lg sm:text-xl font-bold">Lãng phí điện năng</h3>
+                    <h3 class="text-lg sm:text-xl font-extrabold mb-3">Liên kết khép kín</h3>
+                    <p class="text-sm text-brand-textMuted">Phần mềm không đứng ngoài quan sát. Dữ liệu cảm biến đi thẳng tới quyết định và thiết bị chấp hành.</p>
                 </div>
                 <div class="card-base !p-6 sm:!p-8 text-center rounded-md">
-                    <div class="problem-icon">
-                        <i data-lucide="file-x" size="28"></i>
+                    <div class="problem-icon !bg-green-100 !text-brand-primary">
+                        <i data-lucide="wallet-cards" size="28"></i>
                     </div>
-                    <h3 class="text-lg sm:text-xl font-bold">Mất nhật ký giấy</h3>
+                    <h3 class="text-lg sm:text-xl font-extrabold mb-3">Thiết kế chi phí tiếp cận</h3>
+                    <p class="text-sm text-brand-textMuted">Kiến trúc gọn, linh kiện phổ biến và triển khai theo từng ao, hướng tới hộ nuôi vừa và nhỏ.</p>
                 </div>
                 <div class="card-base !p-6 sm:!p-8 text-center rounded-md">
-                    <div class="problem-icon">
-                        <i data-lucide="shield-alert" size="28"></i>
+                    <div class="problem-icon !bg-green-100 !text-brand-primary">
+                        <i data-lucide="mic-2" size="28"></i>
                     </div>
-                    <h3 class="text-lg sm:text-xl font-bold">Phát hiện dịch bệnh trễ</h3>
+                    <h3 class="text-lg sm:text-xl font-extrabold mb-3">Sinh ra cho thực địa</h3>
+                    <p class="text-sm text-brand-textMuted">Giao diện chữ lớn, thao tác ít bước và trợ lý hiểu ngữ cảnh nuôi tôm, phù hợp lúc tay ướt hoặc đang ngoài ao.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- 3. HỆ THỐNG 4 LỚP -->
+    <!-- 3. GIẢI PHÁP - HỆ THỐNG VAST 4 LỚP -->
     <section id="system" class="py-12 sm:py-20">
         <div class="w-full max-w-[1280px] mx-auto px-4 sm:px-6">
-            <h2 class="section-title">Giải Pháp - Hệ Thống 4 Lớp</h2>
+            <div id="closed-loop" class="text-center max-w-3xl mx-auto mb-10 sm:mb-12 scroll-mt-28">
+                <p class="text-brand-primary font-extrabold uppercase tracking-wider text-xs sm:text-sm mb-3">Giải pháp công nghệ khép kín</p>
+                <h2 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold mb-4">Giải Pháp – Hệ Thống VAST 4 Lớp</h2>
+                <p class="text-brand-textMuted">Bốn lớp phối hợp từ cảm biến tại ao đến dữ liệu, cảnh báo và quyết định của người nuôi.</p>
+            </div>
 
             <div
                 class="relative max-w-[900px] mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-8 lg:gap-10 items-center">
@@ -195,21 +232,19 @@
                             <i data-lucide="cpu" size="24"></i>
                         </div>
                         <div>
-                            Lớp 1: Phần cứng IoT<br>
-                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Cảm biến thời gian
-                                thực</span>
+                            Lớp 1 – Cảm biến<br>
+                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Đo liên tục DO, pH và nhiệt độ</span>
                         </div>
                     </div>
                     <div
                         class="bg-brand-surface p-5 sm:p-6 rounded-md shadow-soft flex items-center gap-4 font-semibold text-base sm:text-lg">
                         <div
                             class="w-12 h-12 bg-brand-bg text-brand-primary rounded-full flex items-center justify-center shrink-0">
-                            <i data-lucide="mic" size="24"></i>
+                            <i data-lucide="monitor-smartphone" size="24"></i>
                         </div>
                         <div>
-                            Lớp 2: Web App<br>
-                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Ghi nhật ký rảnh tay bằng
-                                giọng nói</span>
+                            Lớp 2 – Web App<br>
+                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Kết nối thiết bị, kiểm tra và quản lý ao nuôi</span>
                         </div>
                     </div>
                 </div>
@@ -217,8 +252,8 @@
                 <!-- Trung tâm -->
                 <div
                     class="w-[150px] h-[150px] sm:w-[180px] sm:h-[180px] bg-brand-primary text-white rounded-full flex flex-col items-center justify-center text-xl sm:text-2xl font-extrabold text-center shadow-glow z-10 mx-auto">
-                    <i data-lucide="network" size="36" class="mb-2"></i>
-                    Hệ thống<br>IoTSP
+                    <i data-lucide="shield-check" size="36" class="mb-2"></i>
+                    Hệ thống<br>VAST
                 </div>
 
                 <!-- Cột phải (Lớp 3 & 4) -->
@@ -227,25 +262,33 @@
                         class="bg-brand-surface p-5 sm:p-6 rounded-md shadow-soft flex items-center gap-4 font-semibold text-base sm:text-lg">
                         <div
                             class="w-12 h-12 bg-brand-bg text-brand-primary rounded-full flex items-center justify-center shrink-0">
-                            <i data-lucide="database" size="24"></i>
+                            <i data-lucide="brain-circuit" size="24"></i>
                         </div>
                         <div>
-                            Lớp 3: Firebase<br>
-                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Đồng bộ dữ liệu tức
-                                thời</span>
+                            Lớp 3 – AI & Cố vấn<br>
+                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Ghi nhật ký giọng nói; gợi ý thời điểm bán theo giá thị trường</span>
                         </div>
                     </div>
                     <div
                         class="bg-brand-surface p-5 sm:p-6 rounded-md shadow-soft flex items-center gap-4 font-semibold text-base sm:text-lg">
                         <div
                             class="w-12 h-12 bg-brand-bg text-brand-primary rounded-full flex items-center justify-center shrink-0">
-                            <i data-lucide="brain-circuit" size="24"></i>
+                            <i data-lucide="database" size="24"></i>
                         </div>
                         <div>
-                            Lớp 4: AI Dự báo<br>
-                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Cảnh báo thông minh</span>
+                            Lớp 4 – Lưu trữ dữ liệu<br>
+                            <span class="text-brand-textMuted font-medium text-xs sm:text-sm">Đồng bộ sổ sách; tự tính ngày thu hoạch dự kiến</span>
                         </div>
                     </div>
+                </div>
+            </div>
+            <div class="max-w-4xl mx-auto mt-10 p-5 sm:p-6 rounded-2xl bg-slate-900 text-white flex flex-col sm:flex-row gap-4 sm:items-center">
+                <div class="w-12 h-12 rounded-xl bg-green-500/20 text-green-300 flex items-center justify-center shrink-0">
+                    <i data-lucide="wifi-off" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <div class="font-extrabold text-lg">Mạng mất, lớp bảo vệ tại ao vẫn chạy</div>
+                    <p class="text-sm text-slate-300 mt-1">ESP32 khởi động ở AUTO và tự quay lại AUTO khi mất liên lạc quá lâu trong chế độ điều khiển tay. Đây là lớp fail-safe cốt lõi của VAST.</p>
                 </div>
             </div>
         </div>
@@ -341,7 +384,7 @@
                         <i data-lucide="mail" size="18" class="text-brand-primary"></i> vast@gmail.com
                     </div>
                     <div class="flex items-center gap-3 mb-3 text-sm sm:text-base text-gray-300">
-                        <i data-lucide="phone" size="18" class="text-brand-primary"></i> 1900 xxxx
+                        <i data-lucide="phone" size="18" class="text-brand-primary"></i> +84 793 934 894
                     </div>
                     <div class="flex items-center gap-3 mb-3 text-sm sm:text-base text-gray-300">
                         <i data-lucide="map-pin" size="18" class="text-brand-primary"></i> Trường Cao đẳng Nghề An

@@ -23,6 +23,7 @@ const { URL } = require('url');
 const config = require('./config');
 const db = require('./lib/db');
 const market = require('./services/market');
+const emailService = require('./services/email');
 const { handlers, matchDynamic, handleDynamic, send } = require('./routes/api');
 
 // Thu muc goc cua phan web (index.html, dashboard.html, js/, components/...).
@@ -131,13 +132,15 @@ const server = http.createServer(async (req, res) => {
 
     // --- CORS: cho phep mo dashboard tu Live Server hoac dien thoai ---
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Device-Token');
+    res.setHeader('Access-Control-Allow-Headers',
+        'Content-Type, X-Device-Token, X-Session-Token, X-VAST-Device-ID, X-VAST-Device-Type, X-VAST-Device-Name');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
 
     // --- API ---
     if (pathname.startsWith('/api/')) {
-        console.log(`[${new Date().toLocaleTimeString('vi-VN')}] ${req.method} ${req.url}`);
+        const logUrl = pathname === '/api/auth/qr/image' ? pathname : req.url;
+        console.log(`[${new Date().toLocaleTimeString('vi-VN')}] ${req.method} ${logUrl}`);
 
         try {
             const key = `${req.method} ${pathname}`;
@@ -247,6 +250,10 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`   Bao Offline : sau ${config.deviceOfflineSeconds}s khong co telemetry`);
     console.log(`   Gia thi truong: ${config.market.enabled === false ? 'TAT' : 'moi ' + config.market.refreshMinutes + ' phut (' + config.market.provider + ')'}`);
     console.log(`   Luu lich su : moi ${config.historySampleSeconds}s`);
+    console.log(`   Email OTP    : ${emailService.cauHinhSanSang() ? 'GUI EMAIL THAT' : 'CHI IN MA O TERMINAL (chua cau hinh Resend)'}`);
+    console.log(`   Admin hỗ trợ : ${(config.auth.adminPhones || []).length
+        ? `${config.auth.adminPhones.length} tài khoản đã được cấp quyền`
+        : 'CHƯA CẤP QUYỀN (đặt VAST_ADMIN_PHONES trong .env)'}`);
     console.log('--------------------------------------------------------------');
     if (devices.length === 0) {
         console.log('   !! CHUA CO THIET BI NAO.');

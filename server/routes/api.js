@@ -34,6 +34,9 @@ const ask = require('../services/ask');
 const qr = require('../lib/qr');
 const kb = require('../services/kb');
 const harvest = require('../services/harvest');
+const push = require('../services/push');
+const qrLoginRate = new Map();
+const recoverySupportRate = new Map();
 
 // ----------------------------------------------------------------
 // TIEN ICH
@@ -250,6 +253,23 @@ function sseBroadcast() {
 // Can thiet de web biet thiet bi da MAT KET NOI (khong con telemetry nao ve).
 setInterval(sseBroadcast, 3000).unref?.();
 
+let dangKiemTraPush = false;
+async function kiemTraCanhBaoNen() {
+    if (dangKiemTraPush) return;
+    dangKiemTraPush = true;
+    try {
+        for (const device of db.listDevices()) {
+            const shaped = shapeLatest(device);
+            await push.evaluateDevice(device, buildAlerts(shaped));
+        }
+    } catch (error) {
+        console.error('[PUSH] Loi kiem tra canh bao nen:', error.message);
+    } finally {
+        dangKiemTraPush = false;
+    }
+}
+setInterval(kiemTraCanhBaoNen, 5000).unref?.();
+
 
 // ================================================================
 // CAC HANDLER
@@ -344,6 +364,13 @@ const handlers = {
 
         // DAY NGAY xuong trinh duyet - day la mau chot lam web cap nhat tuc thi
         sseBroadcast();
+        // Dong thoi day Web Push toi dien thoai da dang ky, ke ca khi app dong.
+        const freshDevice = db.getDevice(deviceId);
+        if (freshDevice) {
+            const shaped = shapeLatest(freshDevice);
+            push.evaluateDevice(freshDevice, buildAlerts(shaped)).catch(error =>
+                console.error('[PUSH] Loi gui canh bao:', error.message));
+        }
     },
 
     // ---------------- ESP32: LAY LENH ----------------
@@ -495,9 +522,14 @@ function handleDynamic(route, req, res) {
 
 // ---------------- WEB: TAO LENH DIEU KHIEN ----------------
 handlers['POST /api/iot/command'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
     const b = body || {};
     const device = b.device_id && db.getDevice(String(b.device_id));
     if (!device) return send(res, 404, { ok: false, error: 'device_id khong ton tai' });
+    const pond = db.pondGet(device.pond_id);
+    if (!pond || pond.user_id !== u.id) {
+        return send(res, 403, { ok: false, error: 'Bạn không có quyền điều khiển thiết bị này' });
+    }
 
     const cmd = String(b.command || '');
     if (!Object.prototype.hasOwnProperty.call(ALLOWED_COMMANDS, cmd)) {
@@ -855,14 +887,13 @@ function buildFeedPlan(pondId) {
 handlers['GET /api/feed/plan'] = (req, res) => {
     const pondId = req.query.get('pond_id');
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
     send(res, 200, { ok: true, server_time: new Date().toISOString(), plan: buildFeedPlan(String(pondId)) });
 };
 
 handlers['GET /api/feed/plans'] = (req, res) => {
-    // Gop cac ao co trong bang thiet bi VA cac ao da khai bao thong so cho an
-    const ids = new Set();
-    db.listDevices().forEach(d => ids.add(d.pond_id));
-    db.feedAll().forEach(f => ids.add(f.pond_id));
+    const u = canDangNhap(req, res); if (!u) return;
+    const ids = new Set(db.pondList(u.id).map(p => p.pond_id));
 
     send(res, 200, {
         ok: true,
@@ -875,6 +906,7 @@ handlers['POST /api/feed/settings'] = (req, res, body) => {
     const b = body || {};
     const pondId = String(b.pond_id || '').trim();
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
 
     const cu = db.feedGet(pondId) || {};
     const soCu = (v, cuV) => {
@@ -929,6 +961,7 @@ handlers['POST /api/feed/sample'] = (req, res, body) => {
     const b = body || {};
     const pondId = String(b.pond_id || '').trim();
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
 
     let w = Number(b.avg_weight_g);
     if (!Number.isFinite(w) || w <= 0) {
@@ -1000,6 +1033,7 @@ handlers['POST /api/feed/refill'] = (req, res, body) => {
     const pondId = String(b.pond_id || '').trim();
     const kg = Number(b.amount_kg);
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
     if (!Number.isFinite(kg) || kg <= 0 || kg > 10000) {
         return send(res, 400, { ok: false, error: 'Số kg nạp vào không hợp lệ' });
     }
@@ -1027,6 +1061,7 @@ handlers['POST /api/feed/run'] = (req, res, body) => {
     const b = body || {};
     const pondId = String(b.pond_id || '').trim();
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
 
     const plan = buildFeedPlan(pondId);
     if (!plan.ok) return send(res, 400, { ok: false, error: plan.message, missing: plan.missing });
@@ -1109,6 +1144,7 @@ handlers['POST /api/feed/run'] = (req, res, body) => {
 handlers['GET /api/feed/command-status'] = (req, res) => {
     const pondId = req.query.get('pond_id');
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
 
     const device = db.listDevices().find(d => d.pond_id === String(pondId));
     if (!device) return send(res, 404, { ok: false, error: 'Ao này chưa gắn thiết bị ESP32' });
@@ -1173,6 +1209,7 @@ handlers['POST /api/feed/test'] = (req, res, body) => {
     const b = body || {};
     const pondId = String(b.pond_id || '').trim();
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
 
     const device = db.listDevices().find(d => d.pond_id === pondId);
     if (!device) {
@@ -1260,6 +1297,7 @@ handlers['POST /api/feed/test'] = (req, res, body) => {
 handlers['GET /api/feed/logs'] = (req, res) => {
     const pondId = req.query.get('pond_id');
     if (!pondId) return send(res, 400, { ok: false, error: 'Thiếu pond_id' });
+    if (!aoCuaToi(req, res, pondId)) return;
     const limit = Math.min(200, Math.max(1, parseInt(req.query.get('limit') || '20', 10) || 20));
     send(res, 200, { ok: true, logs: db.feedLogRecent(String(pondId), limit) });
 };
@@ -1271,8 +1309,8 @@ handlers['GET /api/feed/logs'] = (req, res) => {
 // cua trinh duyet -> doi may la mat sach, khong xem chung duoc.
 // Gio nam trong database, dang nhap tu may nao cung thay du lieu cua minh.
 //
-//   POST /api/auth/register | login | logout | profile | password
-//   GET  /api/auth/me
+//   POST /api/auth/register | login | google | recover/request | recover | logout
+//   GET  /api/auth/me | google/config
 //   GET/POST /api/ponds ...          ao nuoi
 //   GET/POST /api/transactions ...   so sach thu chi
 //   GET/POST /api/logs               nhat ky hoat dong
@@ -1333,15 +1371,171 @@ function ngay(v) {
 // ---------------- DANG KY / DANG NHAP ----------------
 
 handlers['POST /api/auth/register'] = (req, res, body) => {
-    const r = auth.dangKy(body || {});
+    const r = auth.dangKy(body || {}, req);
     if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
     send(res, 200, { ok: true, ...r });
 };
 
 handlers['POST /api/auth/login'] = (req, res, body) => {
-    const r = auth.dangNhap(body || {});
+    const r = auth.dangNhap(body || {}, req);
     if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
     send(res, 200, { ok: true, ...r });
+};
+
+handlers['GET /api/auth/google/config'] = (req, res) => {
+    const clientId = auth.googleClientId();
+    send(res, 200, { ok: true, enabled: !!clientId, client_id: clientId });
+};
+
+handlers['POST /api/auth/google'] = async (req, res, body) => {
+    // Chặn login-CSRF: JavaScript ở website khác không được dùng token của họ
+    // để ghi đè phiên đang đăng nhập trong trình duyệt của người dùng VAST.
+    const origin = String(req.headers.origin || '');
+    if (origin) {
+        let originHost = '';
+        try { originHost = new URL(origin).host; } catch { /* giữ rỗng */ }
+        if (!originHost || originHost !== String(req.headers.host || '')) {
+            return send(res, 403, { ok: false, error: 'Nguồn yêu cầu đăng nhập Google không hợp lệ.' });
+        }
+    }
+    const r = await auth.dangNhapGoogle(body || {}, req);
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/device/status'] = (req, res, body) => {
+    const r = auth.trangThaiYeuCau(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/device/email'] = async (req, res, body) => {
+    const r = await auth.guiMaDangNhap(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/device/email/verify'] = (req, res, body) => {
+    const r = auth.xacNhanMaDangNhap(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['GET /api/auth/device/requests'] = (req, res) => {
+    const r = auth.danhSachYeuCau(req);
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1], need_login: r.error[0] === 401 });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/device/decision'] = (req, res, body) => {
+    const r = auth.quyetDinhYeuCau(req, body || {}, (body || {}).approve === true);
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1], need_login: r.error[0] === 401 });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/qr/create'] = (req, res, body) => {
+    const ip = String(req.socket.remoteAddress || 'unknown');
+    const now = Date.now();
+    let rate = qrLoginRate.get(ip);
+    if (!rate || now - rate.at > 60000) rate = { at: now, count: 0 };
+    rate.count++;
+    qrLoginRate.set(ip, rate);
+    if (rate.count > 10) return send(res, 429, { ok: false, error: 'Tạo QR quá nhiều lần. Vui lòng chờ một phút.' });
+    send(res, 200, { ok: true, ...auth.taoQrDangNhap(body || {}, req) });
+};
+
+handlers['POST /api/auth/qr/approve'] = (req, res, body) => {
+    const r = auth.chapNhanQr(req, body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1], need_login: r.error[0] === 401 });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['GET /api/auth/qr/image'] = (req, res) => {
+    const requestId = String(req.query.get('id') || '');
+    const secret = String(req.query.get('secret') || '');
+    if (!auth.kiemTraQr({ request_id: requestId, request_secret: secret })) {
+        return send(res, 404, { ok: false, error: 'Mã QR không hợp lệ hoặc đã hết hạn' });
+    }
+    // De id/secret sau dau # de trinh duyet dien thoai KHONG gui chung vao
+    // access log khi mo pair-login.html.
+    const url = `${diaChiCongKhai(req)}/pair-login.html#id=${encodeURIComponent(requestId)}&secret=${encodeURIComponent(secret)}`;
+    let svg;
+    try { svg = qr.taoSVG(url, { muc: 'Q', coO: 7 }); }
+    catch { return send(res, 500, { ok: false, error: 'Không sinh được mã QR' }); }
+    res.writeHead(200, {
+        'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Content-Length': Buffer.byteLength(svg),
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+    });
+    res.end(svg);
+};
+
+handlers['POST /api/auth/recover'] = (req, res, body) => {
+    const r = auth.khoiPhucMatKhau(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, r);
+};
+
+handlers['POST /api/auth/recover/request'] = async (req, res, body) => {
+    const r = await auth.guiMaDatLai(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, r);
+};
+
+handlers['GET /api/auth/recovery-codes'] = (req, res) => {
+    const r = auth.trangThaiMaKhoiPhuc(req);
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1], need_login: r.error[0] === 401 });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/recovery-codes'] = (req, res, body) => {
+    const r = auth.taoLaiMaKhoiPhuc(req, body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1], need_login: r.error[0] === 401 });
+    send(res, 200, r);
+};
+
+handlers['POST /api/auth/recover/code'] = (req, res, body) => {
+    const r = auth.khoiPhucBangMa(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, r);
+};
+
+handlers['POST /api/auth/recover/support/request'] = (req, res, body) => {
+    const ip = String(req.socket.remoteAddress || 'unknown');
+    const now = Date.now();
+    let rate = recoverySupportRate.get(ip);
+    if (!rate || now - rate.at > 3600000) rate = { at: now, count: 0 };
+    rate.count++;
+    recoverySupportRate.set(ip, rate);
+    if (rate.count > 5) return send(res, 429, { ok: false, error: 'Đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau một giờ.' });
+    const r = auth.guiYeuCauHoTro(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, r);
+};
+
+handlers['POST /api/auth/recover/support/status'] = (req, res, body) => {
+    const r = auth.trangThaiHoTro(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/auth/recover/support/complete'] = (req, res, body) => {
+    const r = auth.hoanTatHoTro(body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, r);
+};
+
+handlers['GET /api/admin/recovery'] = (req, res) => {
+    const r = auth.danhSachHoTro(req);
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1], need_login: r.error[0] === 401 });
+    send(res, 200, { ok: true, ...r });
+};
+
+handlers['POST /api/admin/recovery/decision'] = async (req, res, body) => {
+    const r = await auth.xuLyHoTro(req, body || {});
+    if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
+    send(res, 200, r);
 };
 
 handlers['POST /api/auth/logout'] = (req, res) => {
@@ -1352,7 +1546,13 @@ handlers['GET /api/auth/me'] = (req, res) => {
     const u = auth.nguoiDungTuRequest(req);
     if (!u) return send(res, 200, { ok: true, user: null });
     delete u._token;
-    send(res, 200, { ok: true, user: u, settings: db.settingsGet(u.id) });
+    const device = u._session ? {
+        device_id: u._session.device_id,
+        device_type: u._session.device_type,
+        device_name: u._session.device_name,
+    } : null;
+    delete u._session;
+    send(res, 200, { ok: true, user: u, device, settings: db.settingsGet(u.id) });
 };
 
 handlers['POST /api/auth/profile'] = (req, res, body) => {
@@ -1364,9 +1564,41 @@ handlers['POST /api/auth/profile'] = (req, res, body) => {
 
 handlers['POST /api/auth/password'] = (req, res, body) => {
     const u = canDangNhap(req, res); if (!u) return;
-    const r = auth.doiMatKhau(u.id, body || {});
+    const r = auth.doiMatKhau(u.id, body || {}, u._session || {});
     if (r.error) return send(res, r.error[0], { ok: false, error: r.error[1] });
     send(res, 200, r);
+};
+
+// ---------------- THONG BAO DAY TREN DIEN THOAI ----------------
+handlers['GET /api/push/config'] = (req, res) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    send(res, 200, { ok: true, public_key: push.publicKey() });
+};
+
+handlers['POST /api/push/subscribe'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    const r = push.register(u.id, u._session && u._session.device_id, (body || {}).subscription);
+    if (r.error) return send(res, 400, { ok: false, error: r.error });
+    send(res, 200, r);
+};
+
+handlers['POST /api/push/unsubscribe'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    send(res, 200, push.unregister(u.id, (body || {}).endpoint));
+};
+
+handlers['POST /api/push/status'] = (req, res, body) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    send(res, 200, { ok: true, ...push.status(u.id, (body || {}).endpoint) });
+};
+
+handlers['POST /api/push/test'] = async (req, res) => {
+    const u = canDangNhap(req, res); if (!u) return;
+    const result = await push.sendTest(u.id);
+    if (!result.sent) {
+        return send(res, 409, { ok: false, error: 'Chưa gửi được thông báo. Hãy bật quyền thông báo trên điện thoại.' });
+    }
+    send(res, 200, { ok: true, ...result });
 };
 
 // ---------------- AO NUOI ----------------
@@ -1466,6 +1698,7 @@ function shapePond(p) {
         stockingDate: p.stocking_date,
         stocking_date: p.stocking_date,
         status: p.status || 'safe',
+        cycle_status: p.cycle_status || ((p.stocking_date || p.seed_count) ? 'stocked' : 'empty'),
         note: p.note,
         trace_code: p.trace_code,
 
@@ -1575,6 +1808,7 @@ handlers['POST /api/ponds'] = (req, res, body) => {
         seed_count: Number(b.seed_count) > 0 ? Math.round(Number(b.seed_count)) : null,
         stocking_date: ngay(b.stocking_date),
         status: 'safe',
+        cycle_status: (ngay(b.stocking_date) || Number(b.seed_count) > 0) ? 'stocked' : 'empty',
         note: b.note ? String(b.note).slice(0, 500) : null,
         trace_code: traceCode,
     });
@@ -1663,6 +1897,7 @@ handlers['POST /api/ponds/adopt'] = (req, res) => {
             seed_count: null,
             stocking_date: null,
             status: 'safe',
+            cycle_status: 'empty',
             note: `Tạo tự động từ thiết bị ${dev.device_id}`,
             trace_code: traceCode,
         });
@@ -1690,14 +1925,31 @@ handlers['POST /api/ponds/update'] = (req, res, body) => {
     if (!cu || cu.user_id !== u.id) return send(res, 404, { ok: false, error: 'Không tìm thấy ao' });
 
     const doi = (v, cuV) => (v === undefined || v === null || v === '' ? cuV : v);
+    const stockingDateMoi = b.stocking_date !== undefined ? ngay(b.stocking_date) : cu.stocking_date;
+    const seedCountMoi = b.seed_count !== undefined
+        ? (Number(b.seed_count) > 0 ? Math.round(Number(b.seed_count)) : null)
+        : cu.seed_count;
+
+    // Trang thai vu nuoi tach rieng khoi status canh bao cam bien. Sau thu
+    // hoach ao van giu ngay tha cu de truy xuat; chi khi nguoi dung khai
+    // ngay tha moi (hoac nhap lai so giong cho ao trong) moi bat dau vu moi.
+    let cycleStatus = cu.cycle_status || ((cu.stocking_date || cu.seed_count) ? 'stocked' : 'empty');
+    const coNgayThaMoi = b.stocking_date !== undefined
+        && !!stockingDateMoi
+        && stockingDateMoi !== cu.stocking_date;
+    const coSoGiongMoi = b.seed_count !== undefined
+        && Number(b.seed_count) > 0
+        && cycleStatus === 'empty';
+    if (coNgayThaMoi || coSoGiongMoi) cycleStatus = 'stocked';
 
     db.pondUpdate(cu.pond_id, u.id, {
         name: String(doi(b.name, cu.name)).slice(0, 80),
         area_m2: b.area_m2 !== undefined ? (Number(b.area_m2) > 0 ? Number(b.area_m2) : null) : cu.area_m2,
         seed_type: doi(b.seed_type, cu.seed_type),
-        seed_count: b.seed_count !== undefined ? (Number(b.seed_count) > 0 ? Math.round(Number(b.seed_count)) : null) : cu.seed_count,
-        stocking_date: b.stocking_date !== undefined ? ngay(b.stocking_date) : cu.stocking_date,
+        seed_count: seedCountMoi,
+        stocking_date: stockingDateMoi,
         status: doi(b.status, cu.status),
+        cycle_status: cycleStatus,
         note: b.note !== undefined ? String(b.note || '').slice(0, 500) : cu.note,
     });
 
@@ -2368,11 +2620,17 @@ handlers['POST /api/trace/harvest'] = (req, res, body) => {
 
     // Bao NGAY neu thu som hon ngay an toan - khong doi den luc khach quet QR
     const nt = trace.kiemTraNgungThuoc(ctx.pond.pond_id);
-    db.logCreate(ctx.user.id, ctx.pond.pond_id, `Ghi thu hoạch lô ${b.lot_code || '#' + id}`);
+    // Theo nghiep vu VAST, ghi nhan thu hoach la ket thuc vu nuoi. Khong dung
+    // cot status vi cot do duoc IoT cap nhat lien tuc theo muc an toan nuoc.
+    db.pondSetCycleStatus(ctx.pond.pond_id, 'empty');
+    db.harvestPlanXoa(ctx.pond.pond_id);
+    db.logCreate(ctx.user.id, ctx.pond.pond_id,
+        `Ghi thu hoạch lô ${b.lot_code || '#' + id}; trạng thái ao: Trống`);
 
     send(res, 200, {
         ok: true,
         id,
+        pond: shapePond(db.pondGet(ctx.pond.pond_id)),
         ngung_thuoc: nt,
         canh_bao: nt.canh_bao.length ? nt.canh_bao : null,
     });

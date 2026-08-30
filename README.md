@@ -30,7 +30,7 @@ vast/
 │   ├── js/                                 iot, market, feed, store, ai
 │   └── assets/                             logo, icon
 │
-├── server/                 BACKEND Node.js (KHÔNG cần npm install)
+├── server/                 BACKEND Node.js (chạy npm install trước lần đầu)
 │   ├── index.js                            Điểm khởi chạy: HTTP server + phục vụ web
 │   ├── config.js                           Cấu hình + giá trị mặc định
 │   ├── routes/api.js                       Toàn bộ endpoint HTTP
@@ -191,14 +191,95 @@ Lệnh hỗ trợ: `SET_MODE` (AUTO/MANUAL) · `SET_PUMP` · `SET_AERATOR`.
 
 ---
 
+## CI/CD — kiểm tra trước khi đưa bản mới lên thật
+
+Dự án sẽ dùng CI/CD và coding agent theo luồng an toàn:
+
+```text
+Tạo nhánh / Pull Request
+→ CI kiểm tra cú pháp, test, bảo mật và Docker build
+→ CI lỗi: agent đọc log, sửa trên nhánh rồi push lại
+→ CI chạy lại và đạt
+→ Người duyệt mã
+→ Merge vào main
+→ Tự động deploy staging
+→ Kiểm tra giả lập + ESP32 thật
+→ Người có quyền duyệt
+→ Deploy production
+→ Health check, lỗi thì rollback
+```
+
+Quy tắc bắt buộc:
+
+- Nhánh `main` được bảo vệ; không push trực tiếp hoặc force-push.
+- CI đỏ thì không merge và không deploy.
+- Agent chỉ sửa trên nhánh Pull Request, không giữ secret hay SSH key của VPS production.
+- CI xanh chỉ có nghĩa các kiểm tra đã viết đều đạt, không bảo đảm chắc chắn không còn lỗi.
+- Staging có thể tự động; production phải duyệt thủ công trong giai đoạn thi và pilot.
+- Thay đổi logic AUTO, fail-safe, relay, motor, ngưỡng an toàn, xác thực hoặc database bắt buộc có người xem và thử lại trên thiết bị thật.
+
+Chi tiết đầy đủ: [`docs/KE_HOACH_TRIEN_KHAI_THUONG_MAI.md`](docs/KE_HOACH_TRIEN_KHAI_THUONG_MAI.md#8-cicd-và-coding-agent-tự-sửa-lỗi)
+
+---
+
 ## Còn phải làm
 
 - **Cảm biến pH**: đấu GPIO34, đổi `ENABLE_PH_SENSOR` thành `1`, hiệu chỉnh `PH_CAL_*` bằng dung dịch chuẩn pH 7.0 và 4.0. Code đọc, cột database, validate API đều đã sẵn.
 - **Máy cho ăn tự động**: motor cấp cám, đĩa rải, load cell HX711, hẹn giờ. API và database đã chừa chỗ.
 - **Chạy offline**: hiện web tải Tailwind/Alpine/Chart.js từ CDN nên cần Internet. Nên tải về thư mục `vendor/`.
-- **Bảo mật**: hiện dùng HTTP trong mạng LAN, phù hợp demo. Nếu mở ra Internet cần HTTPS và xác thực người dùng thật phía server (hiện đăng nhập mới chỉ lưu localStorage).
+- **Bảo mật**: tài khoản và phiên đăng nhập được xác thực phía server; mật khẩu được băm PBKDF2. Khi mở ra Internet phải dùng HTTPS.
+
+### Bật đăng nhập Google
+
+1. Trong Google Cloud Console, tạo OAuth 2.0 Client ID loại **Web application**.
+2. Thêm `http://localhost:3000` để thử nội bộ và `https://vietnamaismarttracking.top` khi triển khai vào **Authorized JavaScript origins**.
+3. Điền mã Client ID công khai vào `GOOGLE_CLIENT_ID` trong `server/.env`, rồi khởi động lại server. Không cần đưa Google Client Secret vào dự án.
+
+Nút Google do Google Identity Services render chính thức. Backend VAST xác minh chữ ký, `aud`, `iss`, `exp`, email đã xác minh và lưu `sub` làm mã liên kết lâu dài. Người dùng đăng ký VAST bằng Gmail trước; lần đăng nhập Google đầu tiên sẽ tự liên kết đúng tài khoản có cùng email.
 
 Tài liệu kỹ thuật đầy đủ: [`docs/HUONG_DAN_TICH_HOP_ESP32.md`](docs/HUONG_DAN_TICH_HOP_ESP32.md)
+
+Kế hoạch đưa hệ thống lên VPS và thương mại hóa: [`docs/KE_HOACH_TRIEN_KHAI_THUONG_MAI.md`](docs/KE_HOACH_TRIEN_KHAI_THUONG_MAI.md)
+
+## Khôi phục tài khoản an toàn
+
+VAST có bốn lớp khôi phục, theo thứ tự ưu tiên:
+
+1. OTP gửi tới Gmail đã đăng ký tại `forgot-password.html`.
+2. Thiết bị tin cậy vẫn còn đăng nhập.
+3. Một trong 8 mã dự phòng dùng một lần tại `security.html`.
+4. Admin xác minh thủ công tại `admin-recovery.html` khi người dùng mất toàn bộ phương thức trên.
+
+Người dùng mất Gmail gửi yêu cầu tại `account-recovery.html`, cung cấp số điện thoại đăng nhập
+và Gmail mới. Mã ao hoặc mã thiết bị là thông tin không bắt buộc: nếu còn mã, hệ thống tự đối
+chiếu để xử lý nhanh; nếu không còn mã, Admin chỉ được duyệt sau khi xác minh mạnh bằng gọi video,
+gặp trực tiếp hoặc giấy tờ mua thiết bị. Hệ thống gửi mã 8 số có hạn 30 phút tới Gmail mới; người dùng tự đặt mật khẩu. Hoàn tất
+xong, toàn bộ phiên cũ bị đăng xuất và liên kết Google cũ bị hủy để chủ Gmail cũ không thể vào lại.
+
+Mật khẩu, OTP và mã dự phòng gốc không hiển thị cho Admin. Mọi lần duyệt/từ chối đều được ghi
+vào `admin_audit_log`.
+
+### Phiên đăng nhập và cảnh báo nền
+
+- Điện thoại và máy tính đã đăng nhập được ghi nhớ lâu dài; không tự bắt đăng nhập lại sau 30 ngày.
+  Phiên chỉ bị thu hồi khi người dùng đăng xuất, đổi/khôi phục mật khẩu, xóa dữ liệu trình duyệt
+  hoặc cho thiết bị khác cùng loại tiếp quản.
+- Vào **Cài đặt → Cảnh báo nguy hiểm trên điện thoại** và bấm **Bật thông báo** một lần trên từng
+  thiết bị. Service worker nhận Web Push kể cả khi VAST đang đóng.
+- iPhone/iPad cần thêm VAST vào Màn hình chính rồi mới cấp quyền thông báo.
+- VAST gửi khi trạng thái mới chuyển sang nguy hiểm và nhắc lại sau 15 phút nếu vẫn còn nguy hiểm,
+  tránh gửi lặp mỗi lần ESP32 cập nhật cảm biến.
+- Khóa VAPID tự sinh nằm tại `server/data/push-vapid.json`; khi triển khai Docker/VPS phải giữ thư
+  mục `server/data` trên persistent volume và đưa nó vào quy trình backup.
+
+Để cấp quyền Admin trên VPS, thêm vào `server/.env` rồi khởi động lại dịch vụ:
+
+```env
+VAST_ADMIN_PHONES="0901234567"
+```
+
+Nhiều Admin được ngăn cách bằng dấu phẩy. Chỉ tài khoản VAST có số điện thoại nằm trong biến này
+mới mở được trang quản trị. Không dùng trường “vai trò/chức danh” trong hồ sơ làm quyền Admin.
 
 ---
 

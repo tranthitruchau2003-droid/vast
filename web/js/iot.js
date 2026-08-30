@@ -413,7 +413,7 @@ function iotModule() {
             try {
                 const r = await fetch(API + '/api/iot/command', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: window.VAST_DEVICE.authHeaders(true),
                     body: JSON.stringify({ device_id: d.device_id, command, value }),
                 });
                 const j = await r.json();

@@ -8,51 +8,53 @@
     THẬT trong database, và hiện cho người dùng xác nhận trước khi ghi.
 -->
 <div x-show="currentView === 'ai' && !selectedPondId" style="display: none;"
-    class="w-full max-w-3xl mx-auto pb-24 md:pb-8 space-y-5 pt-4">
+    class="w-full max-w-7xl mx-auto pb-24 md:pb-8 space-y-6 pt-2 md:pt-4">
 
     <!-- TIÊU ĐỀ -->
-    <div class="text-center">
-        <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <i data-lucide="bot" class="w-8 h-8"></i>
+    <div class="text-center md:text-left md:flex md:items-center md:gap-5">
+        <div class="w-16 h-16 md:w-20 md:h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto md:mx-0 mb-4 md:mb-0 shadow-sm shrink-0">
+            <i data-lucide="bot" class="w-8 h-8 md:w-10 md:h-10"></i>
         </div>
-        <h2 class="text-2xl md:text-3xl font-black text-slate-800 mb-2">Trợ lý ao nuôi</h2>
-        <!-- Gọi đúng tên: đây là cố vấn dựa trên luật, không phải AI biết suy nghĩ -->
-        <p class="text-sm text-slate-500 font-medium px-4 max-w-lg mx-auto leading-relaxed">
-            Cố vấn dựa trên số liệu thật của ao bạn — oxy, nhiệt độ từ thiết bị, ngày tuổi tôm,
-            giá thị trường và mùa vụ.
-        </p>
+        <div>
+            <h2 class="text-3xl md:text-4xl font-black text-slate-800 mb-2">Trợ lý ao nuôi</h2>
+            <!-- Gọi đúng tên: đây là cố vấn dựa trên luật, không phải AI biết suy nghĩ -->
+            <p class="text-base md:text-lg text-slate-500 font-medium px-4 md:px-0 max-w-3xl mx-auto md:mx-0 leading-relaxed">
+                Cố vấn dựa trên số liệu thật của ao bạn — oxy, nhiệt độ từ thiết bị, ngày tuổi tôm,
+                giá thị trường và mùa vụ.
+            </p>
+        </div>
     </div>
 
     <!-- VIỆC CẦN LÀM NGAY (gom từ tất cả các ao) -->
     <template x-if="ai.viecGap && ai.viecGap.length">
-        <div class="card p-5">
-            <h3 class="font-black text-slate-800 mb-3 flex items-center gap-2">
-                <i data-lucide="siren" class="w-5 h-5 text-red-500"></i>
+        <div class="card p-5 md:p-7">
+            <h3 class="text-lg md:text-xl font-black text-slate-800 mb-4 flex items-center gap-2.5">
+                <i data-lucide="siren" class="w-5 h-5 md:w-6 md:h-6 text-red-500"></i>
                 Việc cần làm ngay
-                <span class="ml-auto text-xs font-bold bg-red-100 text-red-700 px-2 py-1 rounded-lg"
+                <span class="ml-auto text-sm font-bold bg-red-100 text-red-700 px-2.5 py-1 rounded-lg"
                     x-text="ai.viecGap.length + ' việc'"></span>
             </h3>
-            <div class="space-y-2.5">
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-3.5">
                 <template x-for="(v, i) in ai.viecGap.slice(0, 6)" :key="i">
-                    <div class="p-4 rounded-2xl border" :class="aiMucClass(v.muc)">
-                        <div class="flex items-start gap-2.5">
-                            <i :data-lucide="aiMucIcon(v.muc)" class="w-5 h-5 shrink-0 mt-0.5"
+                    <div class="p-4 md:p-5 rounded-2xl border" :class="aiMucClass(v.muc)">
+                        <div class="flex items-start gap-3">
+                            <i :data-lucide="aiMucIcon(v.muc)" class="w-5 h-5 md:w-6 md:h-6 shrink-0 mt-0.5"
                                 :class="aiMucTextClass(v.muc)"></i>
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <span class="font-black text-sm" :class="aiMucTextClass(v.muc)"
+                                    <span class="font-black text-base md:text-lg" :class="aiMucTextClass(v.muc)"
                                         x-text="v.tieu_de"></span>
-                                    <span class="text-[10px] font-bold bg-white/70 px-1.5 py-0.5 rounded"
+                                    <span class="text-xs md:text-sm font-bold bg-white/70 px-2 py-1 rounded"
                                         :class="aiMucTextClass(v.muc)" x-text="v.pond_name"></span>
                                 </div>
-                                <p class="text-xs font-medium mt-1 leading-relaxed"
+                                <p class="text-sm md:text-base font-medium mt-1.5 leading-relaxed"
                                     :class="aiMucTextClass(v.muc)" x-text="v.noi_dung"></p>
                                 <!-- Căn cứ: con số nào dẫn tới kết luận này -->
-                                <p class="text-[11px] font-semibold mt-1.5 opacity-75"
+                                <p class="text-sm font-semibold mt-2 opacity-75"
                                     :class="aiMucTextClass(v.muc)" x-text="'Căn cứ: ' + v.can_cu"></p>
-                                <ul class="mt-2 space-y-0.5" x-show="v.viec_can_lam && v.viec_can_lam.length">
+                                <ul class="mt-2.5 space-y-1" x-show="v.viec_can_lam && v.viec_can_lam.length">
                                     <template x-for="(x, j) in v.viec_can_lam" :key="j">
-                                        <li class="text-[11px] font-medium flex gap-1.5"
+                                        <li class="text-sm font-medium flex gap-1.5"
                                             :class="aiMucTextClass(v.muc)">
                                             <span>•</span><span x-text="x"></span>
                                         </li>
@@ -67,59 +69,59 @@
     </template>
 
     <!-- CHUYỂN GIỮA GHI NHẬT KÝ VÀ HỎI -->
-    <div class="flex bg-slate-100 p-1 rounded-2xl">
+    <div class="flex bg-slate-100 p-1.5 rounded-2xl">
         <button @click="ai.cheDo = 'ghi'"
-            class="flex-1 py-2.5 text-sm rounded-xl transition flex items-center justify-center gap-2"
+            class="flex-1 py-3 md:py-4 text-base md:text-lg rounded-xl transition flex items-center justify-center gap-2.5"
             :class="ai.cheDo === 'ghi' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium'">
-            <i data-lucide="pencil-line" class="w-4 h-4"></i> Ghi nhật ký
+            <i data-lucide="pencil-line" class="w-5 h-5"></i> Ghi nhật ký
         </button>
         <button @click="ai.cheDo = 'hoi'"
-            class="flex-1 py-2.5 text-sm rounded-xl transition flex items-center justify-center gap-2"
+            class="flex-1 py-3 md:py-4 text-base md:text-lg rounded-xl transition flex items-center justify-center gap-2.5"
             :class="ai.cheDo === 'hoi' ? 'bg-white shadow-sm font-bold text-slate-800' : 'text-slate-500 font-medium'">
-            <i data-lucide="message-circle-question" class="w-4 h-4"></i> Hỏi
+            <i data-lucide="message-circle-question" class="w-5 h-5"></i> Hỏi
         </button>
     </div>
 
     <!-- ============================================================ -->
     <!-- CHẾ ĐỘ GHI NHẬT KÝ                                          -->
     <!-- ============================================================ -->
-    <div x-show="ai.cheDo === 'ghi'" class="card p-6">
+    <div x-show="ai.cheDo === 'ghi'" class="card p-5 md:p-8">
 
         <!-- Nút micro -->
-        <div class="relative w-28 h-28 flex items-center justify-center mx-auto mb-4">
+        <div class="relative w-32 h-32 md:w-36 md:h-36 flex items-center justify-center mx-auto mb-4">
             <div x-show="isRecording" class="absolute inset-0 bg-green-500 rounded-full animate-pulse-ring"></div>
             <button @click="aiBatMicro()" :disabled="!ai.micHoTro"
-                class="relative z-10 w-20 h-20 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 active:scale-90 disabled:opacity-40"
+                class="relative z-10 w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center shadow-xl transition-all duration-300 active:scale-90 disabled:opacity-40"
                 :class="isRecording ? 'bg-red-500 text-white shadow-red-500/50' : 'bg-green-500 text-white hover:bg-green-600'">
-                <i data-lucide="mic" class="w-9 h-9" :class="{'animate-pulse': isRecording}"></i>
+                <i data-lucide="mic" class="w-9 h-9 md:w-11 md:h-11" :class="{'animate-pulse': isRecording}"></i>
             </button>
         </div>
 
-        <p x-show="isRecording" class="text-red-500 font-bold text-center animate-pulse mb-2">
+        <p x-show="isRecording" class="text-base md:text-lg text-red-500 font-bold text-center animate-pulse mb-2">
             ĐANG NGHE… nói xong thì dừng lại
         </p>
 
         <!-- Chữ đang nghe dở — cho thấy micro THẬT SỰ đang hoạt động -->
         <p x-show="ai.nghiTam" x-cloak
-            class="text-center text-slate-400 font-medium italic mb-2" x-text="'“' + ai.nghiTam + '…”'"></p>
+            class="text-base text-center text-slate-400 font-medium italic mb-2" x-text="'“' + ai.nghiTam + '…”'"></p>
 
         <!-- Trình duyệt không hỗ trợ / lỗi micro: nói rõ, không im lặng -->
         <div x-show="!ai.micHoTro || ai.micLoi" x-cloak
-            class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
-            <i data-lucide="mic-off" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
-            <p class="text-xs text-amber-800 font-medium leading-relaxed"
+            class="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <i data-lucide="mic-off" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+            <p class="text-sm md:text-base text-amber-800 font-medium leading-relaxed"
                 x-text="ai.micLoi || 'Trình duyệt này không nhận được giọng nói. Hãy dùng Chrome hoặc Edge, hoặc gõ tay bên dưới.'">
             </p>
         </div>
 
         <!-- Ô gõ tay -->
-        <div class="flex gap-2 mt-4" x-show="!ai.phanLoai">
+        <div class="flex gap-3 mt-4" x-show="!ai.phanLoai">
             <input type="text" x-model="ai.nhap" @keydown.enter="aiPhanLoai()"
                 placeholder="Ví dụ: Cho ao 1 ăn 5 ký cám lúc 8 giờ"
-                class="flex-1 w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 font-medium text-slate-700">
+                class="flex-1 w-full min-h-14 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 md:px-5 py-3 text-base md:text-lg focus:outline-none focus:border-green-500 font-medium text-slate-700">
             <button @click="aiPhanLoai()" :disabled="ai.dangPhanLoai || !ai.nhap"
-                class="w-12 h-12 shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center transition-colors active:scale-95 shadow-md disabled:opacity-40">
-                <i data-lucide="send" class="w-5 h-5"></i>
+                class="w-14 h-14 shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center transition-colors active:scale-95 shadow-md disabled:opacity-40">
+                <i data-lucide="send" class="w-6 h-6"></i>
             </button>
         </div>
 
@@ -129,30 +131,30 @@
         <!-- sửa được trước khi lưu, không bao giờ ghi nhầm ao.   -->
         <!-- ==================================================== -->
         <template x-if="ai.phanLoai">
-            <div class="mt-4 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
-                <p class="text-slate-400 text-[11px] font-bold uppercase mb-1">Sẽ ghi vào nhật ký</p>
-                <p class="text-base font-bold text-slate-800 mb-3" x-text="'“' + ai.phanLoai.noi_dung + '”'"></p>
+            <div class="mt-4 p-4 md:p-6 bg-slate-50 border-2 border-slate-200 rounded-2xl">
+                <p class="text-slate-400 text-xs md:text-sm font-bold uppercase mb-1">Sẽ ghi vào nhật ký</p>
+                <p class="text-base md:text-lg font-bold text-slate-800 mb-3" x-text="'“' + ai.phanLoai.noi_dung + '”'"></p>
 
                 <div class="flex flex-wrap gap-2 mb-3">
-                    <span class="inline-flex items-center gap-1.5 text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg text-slate-700">
-                        <i :data-lucide="ai.phanLoai.loai_icon" class="w-3.5 h-3.5"></i>
+                    <span class="inline-flex items-center gap-1.5 text-sm font-bold bg-white border border-slate-200 px-3 py-2 rounded-lg text-slate-700">
+                        <i :data-lucide="ai.phanLoai.loai_icon" class="w-4 h-4"></i>
                         <span x-text="ai.phanLoai.loai_ten"></span>
                     </span>
                     <template x-if="ai.phanLoai.so_lieu && ai.phanLoai.so_lieu.kg">
-                        <span class="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg text-slate-700"
+                        <span class="text-sm font-bold bg-white border border-slate-200 px-3 py-2 rounded-lg text-slate-700"
                             x-text="ai.phanLoai.so_lieu.kg + ' kg'"></span>
                     </template>
                     <template x-if="ai.phanLoai.so_lieu && ai.phanLoai.so_lieu.gio !== undefined">
-                        <span class="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg text-slate-700"
+                        <span class="text-sm font-bold bg-white border border-slate-200 px-3 py-2 rounded-lg text-slate-700"
                             x-text="ai.phanLoai.so_lieu.gio + ' giờ'"></span>
                     </template>
                 </div>
 
                 <!-- Chọn ao -->
-                <label class="block text-xs font-bold text-slate-600 mb-1.5">Ao</label>
+                <label class="block text-sm md:text-base font-bold text-slate-600 mb-1.5">Ao</label>
                 <div class="relative">
                     <select x-model="ai.chonAo"
-                        class="w-full p-3 pr-10 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-green-500 font-bold text-slate-800 appearance-none cursor-pointer">
+                        class="w-full p-3.5 pr-10 bg-white border-2 border-slate-200 rounded-xl text-base focus:outline-none focus:border-green-500 font-bold text-slate-800 appearance-none cursor-pointer">
                         <option value="">— Không gắn ao nào —</option>
                         <template x-for="a in (ai.phanLoai.danh_sach_ao || [])" :key="a.pond_id">
                             <option :value="a.pond_id" x-text="a.name"></option>
@@ -163,27 +165,27 @@
                 </div>
 
                 <!-- Hệ thống tự chọn được thì nói rõ vì sao -->
-                <p class="text-[11px] text-slate-500 font-medium mt-1.5" x-show="ai.phanLoai.cach_chon_ao"
+                <p class="text-sm text-slate-500 font-medium mt-2" x-show="ai.phanLoai.cach_chon_ao"
                     x-text="'Tự chọn theo: ' + ai.phanLoai.cach_chon_ao"></p>
 
                 <!-- Không chắc thì HỎI LẠI, không đoán bừa -->
-                <p class="text-[11px] text-amber-700 font-bold mt-1.5" x-show="ai.phanLoai.hoi_lai"
+                <p class="text-sm text-amber-700 font-bold mt-2" x-show="ai.phanLoai.hoi_lai"
                     x-text="ai.phanLoai.hoi_lai"></p>
 
                 <!-- Dùng thuốc: nhắc ghi vào hồ sơ truy xuất -->
                 <div x-show="ai.phanLoai.nhac_them" x-cloak
-                    class="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
-                    <p class="text-[11px] text-amber-800 font-medium leading-relaxed" x-text="ai.phanLoai.nhac_them"></p>
+                    class="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+                    <p class="text-sm md:text-base text-amber-800 font-medium leading-relaxed" x-text="ai.phanLoai.nhac_them"></p>
                 </div>
 
                 <div class="flex gap-2 mt-4">
                     <button @click="aiGhiNhatKy()"
-                        class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-md active:scale-95 transition">
+                        class="flex-1 py-3.5 text-base bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-md active:scale-95 transition">
                         Ghi vào nhật ký
                     </button>
                     <button @click="aiXoaNhap()"
-                        class="w-12 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl flex items-center justify-center active:scale-95 transition">
+                        class="w-14 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl flex items-center justify-center active:scale-95 transition">
                         <i data-lucide="x" class="w-5 h-5"></i>
                     </button>
                 </div>
@@ -194,77 +196,77 @@
     <!-- ============================================================ -->
     <!-- CHẾ ĐỘ HỎI                                                  -->
     <!-- ============================================================ -->
-    <div x-show="ai.cheDo === 'hoi'" class="card p-6">
+    <div x-show="ai.cheDo === 'hoi'" class="card p-5 md:p-8">
 
-        <div class="flex gap-2">
+        <div class="flex gap-2 md:gap-3">
             <input type="text" x-model="ai.cauHoi" @keydown.enter="aiHoi()"
                 placeholder="Hỏi về ao nuôi, giá tôm, bệnh tôm…"
-                class="flex-1 w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 font-medium text-slate-700">
+                class="flex-1 w-full min-h-14 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 md:px-5 py-3 text-base md:text-lg focus:outline-none focus:border-blue-500 font-medium text-slate-700">
             <button @click="aiBatMicro()" :disabled="!ai.micHoTro" title="Hỏi bằng giọng nói"
-                class="w-12 h-12 shrink-0 rounded-xl flex items-center justify-center transition active:scale-95 disabled:opacity-40"
+                class="w-14 h-14 shrink-0 rounded-xl flex items-center justify-center transition active:scale-95 disabled:opacity-40"
                 :class="isRecording ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">
-                <i data-lucide="mic" class="w-5 h-5"></i>
+                <i data-lucide="mic" class="w-6 h-6"></i>
             </button>
             <button @click="aiHoi()" :disabled="ai.dangHoi || !ai.cauHoi"
-                class="w-12 h-12 shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center transition-colors active:scale-95 shadow-md disabled:opacity-40">
-                <i data-lucide="send" class="w-5 h-5"></i>
+                class="w-14 h-14 shrink-0 bg-blue-600 hover:bg-blue-700 text-white rounded-xl flex items-center justify-center transition-colors active:scale-95 shadow-md disabled:opacity-40">
+                <i data-lucide="send" class="w-6 h-6"></i>
             </button>
         </div>
 
         <!-- Câu gợi ý -->
         <div class="mt-4" x-show="!ai.traLoi">
-            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-2">Hỏi thử</p>
+            <p class="text-sm font-bold text-slate-400 uppercase tracking-wide mb-2.5">Hỏi thử</p>
             <div class="flex flex-wrap gap-2">
                 <template x-for="g in ai.goiY" :key="g.ma">
                     <button @click="aiHoi(g.cau)"
-                        class="px-3 py-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-xs font-bold text-slate-700 transition active:scale-95"
+                        class="px-3.5 py-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl text-sm md:text-base font-bold text-slate-700 transition active:scale-95"
                         x-text="g.cau"></button>
                 </template>
             </div>
         </div>
 
-        <div x-show="ai.dangHoi" class="mt-5 text-center text-sm text-slate-400 font-medium">Đang xem số liệu ao…</div>
+        <div x-show="ai.dangHoi" class="mt-5 text-center text-base text-slate-400 font-medium">Đang xem số liệu ao…</div>
 
         <!-- Câu trả lời -->
         <template x-if="ai.traLoi">
             <div class="mt-5">
-                <div class="p-4 rounded-2xl border"
+                <div class="p-4 md:p-6 rounded-2xl border"
                     :class="ai.traLoi.hieu_duoc ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'">
-                    <p class="text-sm font-bold leading-relaxed"
+                    <p class="text-base md:text-lg font-bold leading-relaxed"
                         :class="ai.traLoi.hieu_duoc ? 'text-blue-900' : 'text-slate-700'"
                         x-text="ai.traLoi.tra_loi"></p>
 
                     <!-- Số liệu thật của ao -->
-                    <p class="text-xs font-bold text-blue-800 mt-2 bg-white/60 p-2.5 rounded-lg"
+                    <p class="text-sm md:text-base font-bold text-blue-800 mt-3 bg-white/60 p-3 rounded-lg"
                         x-show="ai.traLoi.so_lieu_that" x-text="ai.traLoi.so_lieu_that"></p>
                 </div>
 
                 <div class="mt-3 space-y-2" x-show="ai.traLoi.chi_tiet && ai.traLoi.chi_tiet.length">
                     <template x-for="(c, i) in (ai.traLoi.chi_tiet || [])" :key="i">
-                        <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                            <p class="text-xs font-black text-slate-700 mb-1" x-text="c.tieu_de"></p>
-                            <p class="text-xs text-slate-600 font-medium leading-relaxed" x-text="c.noi_dung"></p>
+                        <div class="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                            <p class="text-sm md:text-base font-black text-slate-700 mb-1" x-text="c.tieu_de"></p>
+                            <p class="text-sm md:text-base text-slate-600 font-medium leading-relaxed" x-text="c.noi_dung"></p>
                         </div>
                     </template>
                 </div>
 
                 <div x-show="ai.traLoi.luu_y" x-cloak
-                    class="mt-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
-                    <p class="text-xs text-amber-800 font-medium leading-relaxed" x-text="ai.traLoi.luu_y"></p>
+                    class="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+                    <p class="text-sm md:text-base text-amber-800 font-medium leading-relaxed" x-text="ai.traLoi.luu_y"></p>
                 </div>
 
                 <!-- Nói rõ đây là cố vấn dựa trên luật -->
-                <p class="text-[11px] text-slate-400 font-medium mt-3 text-center" x-text="ai.traLoi.ghi_chu"></p>
+                <p class="text-sm text-slate-400 font-medium mt-3 text-center" x-text="ai.traLoi.ghi_chu"></p>
 
                 <div class="flex flex-wrap gap-2 mt-4">
                     <template x-for="g in (ai.traLoi.goi_y || [])" :key="g.ma">
                         <button @click="aiHoi(g.cau)"
-                            class="px-3 py-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 transition active:scale-95"
+                            class="px-3.5 py-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded-xl text-sm md:text-base font-bold text-slate-700 transition active:scale-95"
                             x-text="g.cau"></button>
                     </template>
                     <button @click="aiXoaTraLoi()"
-                        class="px-3 py-2 text-xs font-bold text-slate-400 hover:text-slate-600">Xóa</button>
+                        class="px-3.5 py-2.5 text-sm font-bold text-slate-400 hover:text-slate-600">Xóa</button>
                 </div>
             </div>
         </template>
@@ -273,26 +275,26 @@
     <!-- ============================================================ -->
     <!-- NHẬT KÝ GOM THEO TỪNG AO                                    -->
     <!-- ============================================================ -->
-    <div class="card p-5" x-show="aiNhatKyTheoAo().length">
-        <h3 class="font-black text-slate-800 mb-3 flex items-center gap-2">
-            <i data-lucide="book-open" class="w-5 h-5 text-green-600"></i> Nhật ký từng ao
+    <div class="card p-5 md:p-7" x-show="aiNhatKyTheoAo().length">
+        <h3 class="text-lg md:text-xl font-black text-slate-800 mb-4 flex items-center gap-2.5">
+            <i data-lucide="book-open" class="w-5 h-5 md:w-6 md:h-6 text-green-600"></i> Nhật ký từng ao
         </h3>
-        <div class="space-y-4">
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <template x-for="nhom in aiNhatKyTheoAo()" :key="nhom.pond.pond_id || 'chung'">
                 <div>
                     <div class="flex items-center gap-2 mb-2">
-                        <span class="text-xs font-black text-slate-700" x-text="nhom.pond.name"></span>
-                        <span class="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded"
+                        <span class="text-base font-black text-slate-700" x-text="nhom.pond.name"></span>
+                        <span class="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded"
                             x-text="nhom.logs.length + ' mục'"></span>
                     </div>
                     <div class="space-y-1.5">
                         <template x-for="log in nhom.logs.slice(0, 5)" :key="log.id">
-                            <div class="p-3 bg-slate-50 border border-slate-100 rounded-xl flex items-start gap-2.5">
-                                <span class="text-[10px] font-bold text-slate-400 shrink-0 mt-0.5"
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl flex items-start gap-3">
+                                <span class="text-xs font-bold text-slate-400 shrink-0 mt-0.5"
                                     x-text="log.time"></span>
-                                <p class="text-xs text-slate-700 font-medium leading-relaxed flex-1"
+                                <p class="text-sm md:text-base text-slate-700 font-medium leading-relaxed flex-1"
                                     x-text="log.content"></p>
-                                <span class="text-[10px] text-slate-400 font-semibold shrink-0" x-text="log.date"></span>
+                                <span class="text-xs text-slate-400 font-semibold shrink-0" x-text="log.date"></span>
                             </div>
                         </template>
                     </div>

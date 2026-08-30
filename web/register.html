@@ -54,6 +54,7 @@
         }
     </script>
     <script src="js/vast-config.js?v=5"></script>
+    <script src="js/device-auth.js?v=1"></script>
     <style>[x-cloak]{display:none!important}</style>
 </head>
 
@@ -91,6 +92,7 @@
                 <form x-data="{ 
                         fullName: '',
                         phone: '',
+                        email: '',
                         password: '',
                         showPassword: false,
                         dangGui: false,
@@ -101,8 +103,8 @@
                         // khong bao gio giu mat khau goc cua ban.
                         async registerUser() {
                             this.loi = '';
-                            if (!this.fullName || !this.phone || !this.password) {
-                                this.loi = 'Vui lòng điền đủ họ tên, số điện thoại và mật khẩu';
+                            if (!this.fullName || !this.phone || !this.email || !this.password) {
+                                this.loi = 'Vui lòng điền đủ họ tên, số điện thoại, email và mật khẩu';
                                 return;
                             }
                             if (this.password.length < 6) {
@@ -119,7 +121,9 @@
                                     body: JSON.stringify({
                                         name: this.fullName,
                                         phone: this.phone,
-                                        password: this.password
+                                        email: this.email,
+                                        password: this.password,
+                                        ...window.VAST_DEVICE.get()
                                     })
                                 });
                                 const d = await r.json();
@@ -166,6 +170,18 @@
                         </div>
                     </div>
 
+                    <!-- Email dùng để gửi OTP khi người dùng quên mật khẩu. -->
+                    <div class="mb-5">
+                        <label for="register-email" class="block font-bold text-slate-700 text-sm sm:text-[15px] mb-2">Email khôi phục</label>
+                        <div class="relative flex items-center">
+                            <i data-lucide="mail" class="absolute left-4 text-slate-400 w-5 h-5"></i>
+                            <input id="register-email" type="email" x-model.trim="email" autocomplete="email"
+                                class="w-full py-3.5 sm:py-4 pr-4 pl-12 border-2 border-slate-200 rounded-xl text-sm sm:text-base transition-all focus:border-brand-primary focus:ring-4 focus:ring-brand-primary/10 focus:outline-none bg-slate-50 font-medium text-slate-800"
+                                placeholder="Ví dụ: ban@gmail.com" required>
+                        </div>
+                        <p class="mt-1.5 text-[11px] text-slate-500 font-medium">Dùng để nhận mã xác nhận khi quên mật khẩu.</p>
+                    </div>
+
                     <!-- Input Mật khẩu -->
                     <div class="mb-6">
                         <label class="block font-bold text-slate-700 text-sm sm:text-[15px] mb-2">Tạo mật khẩu</label>
@@ -200,12 +216,13 @@
                         Đã có tài khoản? <a href="login.html"
                             class="text-brand-primary font-bold hover:underline transition-all">Đăng nhập</a>
                     </div>
+
                 </form>
             </div>
 
             <!-- FOOTER (Điều khoản bên dưới form) -->
             <p class="mt-6 sm:mt-8 text-xs sm:text-sm text-slate-500 font-medium text-center">
-                Bằng việc đăng ký, bạn đồng ý với <a href="#"
+                Bằng việc đăng ký, bạn đồng ý với <a href="terms.html"
                     class="text-brand-primary hover:underline transition-all font-bold">Điều khoản sử dụng</a>
             </p>
         </div>

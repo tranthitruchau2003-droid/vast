@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>Cấp quyền đăng nhập PC - VAST</title>
+    <script src="js/vast-config.js?v=5"></script>
+    <script src="js/device-auth.js?v=1"></script>
+    <style>
+        *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:#d8eadf;font-family:Arial,sans-serif;color:#1e293b}
+        .card{width:min(440px,100%);background:#fff;border-radius:24px;padding:28px;box-shadow:0 20px 50px #173c2820;text-align:center}.logo{height:66px}.icon{font-size:48px;margin:12px}.muted{color:#64748b;font-size:14px;line-height:1.55}.warn{padding:12px;background:#fff7e6;border:1px solid #f3c56b;border-radius:14px;color:#854d0e;font-size:13px;margin:18px 0}.btn{width:100%;border:0;border-radius:14px;padding:14px;font-size:16px;font-weight:800;cursor:pointer}.yes{background:#2a8b47;color:#fff}.no{margin-top:10px;background:#f1f5f9;color:#475569}.status{margin-top:16px;font-weight:700;font-size:14px}.error{color:#b91c1c}.ok{color:#166534}
+    </style>
+</head>
+<body>
+<main class="card">
+    <img src="assets/logo.png" class="logo" alt="VAST">
+    <div class="icon">🖥️</div>
+    <h1>Cấp quyền đăng nhập máy tính</h1>
+    <p class="muted">Chỉ đồng ý nếu chính bạn đang mở trang đăng nhập VAST trên máy tính ở trước mặt.</p>
+    <div class="warn">Sau khi đồng ý, máy tính cũ của tài khoản (nếu có) sẽ đăng xuất. Điện thoại này vẫn tiếp tục hoạt động.</div>
+    <button id="approve" class="btn yes">Đồng ý đăng nhập PC</button>
+    <button class="btn no" onclick="location.href='dashboard.html'">Hủy bỏ</button>
+    <div id="status" class="status"></div>
+</main>
+<script>
+    const API=(window.VAST_CONFIG?.API_BASE||'').replace(/\/$/,'');
+    const params=new URLSearchParams(location.hash.replace(/^#/,''));
+    const request_id=params.get('id')||'', request_secret=params.get('secret')||'';
+    const statusEl=document.getElementById('status'), button=document.getElementById('approve');
+    if(!request_id||!request_secret){button.disabled=true;statusEl.className='status error';statusEl.textContent='Mã QR không hợp lệ.';}
+    button.addEventListener('click',async()=>{
+        button.disabled=true;statusEl.className='status';statusEl.textContent='Đang kiểm tra…';
+        let token='';try{token=localStorage.getItem('vast_session_token')||'';}catch(e){}
+        if(!token){try{localStorage.setItem('vast_pair_return',location.href);}catch(e){}location.href='login.html';return;}
+        try{
+            const r=await fetch(API+'/api/auth/qr/approve',{method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':token,...window.VAST_DEVICE.headers()},body:JSON.stringify({request_id,request_secret})});
+            const d=await r.json();
+            if(!r.ok||!d.ok){if(r.status===401){try{localStorage.setItem('vast_pair_return',location.href);localStorage.removeItem('vast_session_token');}catch(e){}location.href='login.html';return;}throw new Error(d.error||'Không cấp quyền được');}
+            statusEl.className='status ok';statusEl.textContent='Đã cấp quyền cho máy tính. Bạn có thể đóng trang này.';
+            button.style.display='none';
+        }catch(e){statusEl.className='status error';statusEl.textContent=e.message;button.disabled=false;}
+    });
+</script>
+</body>
+</html>

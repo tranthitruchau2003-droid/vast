@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Bảo mật tài khoản - VAST</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="js/vast-config.js?v=5"></script>
+    <script src="js/device-auth.js?v=1"></script>
+    <style>
+        html, body {
+            min-height: 100%;
+            height: auto !important;
+            overflow-x: hidden;
+            overflow-y: auto !important;
+        }
+        body { font-family: Inter, Arial, sans-serif; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-100 text-slate-800">
+<a href="dashboard.html" aria-label="Quay lại trang quản lý"
+    class="fixed top-4 left-4 z-50 px-4 py-3 rounded-2xl bg-white border border-slate-200
+        shadow-lg font-bold text-green-700 hover:bg-green-50">
+    ← Quay lại
+</a>
+<main class="max-w-3xl mx-auto p-4 sm:p-8">
+    <a href="dashboard.html" class="inline-flex items-center gap-2 font-bold text-green-700 mb-5">
+        ← Về trang quản lý
+    </a>
+
+    <section class="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-9">
+        <div class="flex items-start gap-4">
+            <div class="w-12 h-12 shrink-0 rounded-2xl bg-green-100 text-green-700 flex items-center justify-center">
+                <i data-lucide="shield-check"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black">Mã khôi phục dự phòng</h1>
+                <p class="text-slate-500 mt-1">Dùng khi bạn mất Gmail và điện thoại. Mỗi mã chỉ dùng được một lần.</p>
+            </div>
+        </div>
+
+        <div id="message" hidden class="mt-6 p-4 rounded-2xl font-semibold" role="status"></div>
+
+        <div class="mt-7 p-5 rounded-2xl bg-slate-50 border border-slate-200">
+            <div class="grid sm:grid-cols-3 gap-4 text-center">
+                <div>
+                    <p class="text-xs font-bold uppercase text-slate-400">Đã tạo</p>
+                    <p id="totalCodes" class="text-xl font-black mt-1">0</p>
+                </div>
+                <div>
+                    <p class="text-xs font-bold uppercase text-slate-400">Còn dùng được</p>
+                    <p id="remainingCodes" class="text-xl font-black mt-1 text-green-700">0</p>
+                </div>
+                <div>
+                    <p class="text-xs font-bold uppercase text-slate-400">Lần tạo gần nhất</p>
+                    <p id="generatedAt" class="text-sm font-bold mt-2">Chưa tạo</p>
+                </div>
+            </div>
+        </div>
+
+        <form id="generateForm" class="mt-6" novalidate>
+            <label for="currentPassword" class="block font-bold mb-2">Nhập mật khẩu hiện tại để tạo mã mới</label>
+            <input id="currentPassword" type="password" autocomplete="current-password"
+                class="w-full p-4 border-2 border-slate-200 rounded-2xl focus:border-green-600 outline-none"
+                placeholder="Mật khẩu hiện tại">
+            <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-xl mt-3">
+                Tạo bộ mã mới sẽ hủy toàn bộ mã cũ. VAST chỉ hiển thị mã mới đúng một lần.
+            </p>
+            <button id="generateButton" type="button"
+                style="color:#fff!important;font-size:16px!important;font-weight:800!important"
+                class="mt-4 w-full min-h-14 px-5 py-4 rounded-2xl bg-green-700 hover:bg-green-800
+                    shadow-md shadow-green-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                Tạo 8 mã khôi phục mới
+            </button>
+        </form>
+
+        <div id="codesPanel" hidden class="mt-7 border-2 border-green-200 bg-green-50 rounded-2xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h2 class="font-black text-green-900">Hãy lưu ngay các mã này</h2>
+                <button id="copyButton" type="button" class="px-3 py-2 bg-white border rounded-xl font-bold text-sm">
+                    Sao chép
+                </button>
+            </div>
+            <div id="codesGrid" class="grid sm:grid-cols-2 gap-2"></div>
+            <button id="downloadButton" type="button"
+                class="mt-4 w-full p-3 bg-slate-900 text-white rounded-xl font-bold">
+                Tải tệp mã về máy
+            </button>
+            <a href="dashboard.html"
+                class="mt-3 w-full p-3 bg-green-700 hover:bg-green-800 text-white rounded-xl font-bold
+                    flex items-center justify-center gap-2 shadow-sm">
+                ← Quay lại trang quản lý
+            </a>
+        </div>
+    </section>
+</main>
+
+<script>
+(() => {
+    'use strict';
+
+    const state = { codes: [], busy: false };
+    const byId = id => document.getElementById(id);
+
+    function api(path) {
+        return (window.VAST_CONFIG?.API_BASE || '').replace(/\/$/, '') + path;
+    }
+
+    async function call(path, options = {}) {
+        const response = await fetch(api(path), {
+            ...options,
+            headers: {
+                ...window.VAST_DEVICE.authHeaders(!!options.body),
+                ...(options.headers || {}),
+            },
+        });
+        let data = null;
+        try { data = await response.json(); } catch { data = null; }
+        if (!response.ok || !data?.ok) {
+            const error = new Error(data?.error || 'Không kết nối được máy chủ');
+            error.status = response.status;
+            throw error;
+        }
+        return data;
+    }
+
+    function showMessage(text, isError = false) {
+        const box = byId('message');
+        box.textContent = text || '';
+        box.hidden = !text;
+        box.className = 'mt-6 p-4 rounded-2xl font-semibold '
+            + (isError ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-green-50 text-green-800 border border-green-200');
+    }
+
+    function renderStatus(status = {}) {
+        byId('totalCodes').textContent = Number(status.total || 0);
+        byId('remainingCodes').textContent = Number(status.remaining || 0);
+        byId('generatedAt').textContent = status.generated_at
+            ? new Date(status.generated_at).toLocaleString('vi-VN')
+            : 'Chưa tạo';
+    }
+
+    function setBusy(value) {
+        state.busy = value;
+        const button = byId('generateButton');
+        button.disabled = value;
+        button.textContent = value ? 'Đang tạo mã...' : 'Tạo 8 mã khôi phục mới';
+    }
+
+    function recoveryText() {
+        return [
+            'MÃ KHÔI PHỤC VAST',
+            'Không chia sẻ cho người khác. Mỗi mã chỉ dùng một lần.',
+            '',
+            ...state.codes,
+        ].join('\n');
+    }
+
+    function renderCodes(codes) {
+        state.codes = Array.isArray(codes) ? codes : [];
+        const grid = byId('codesGrid');
+        const panel = byId('codesPanel');
+        grid.replaceChildren();
+        for (const value of state.codes) {
+            const code = document.createElement('code');
+            code.className = 'bg-white border border-green-200 p-3 rounded-xl text-center font-black tracking-wide';
+            code.textContent = value;
+            grid.appendChild(code);
+        }
+        panel.hidden = state.codes.length === 0;
+        if (state.codes.length > 0) {
+            panel.removeAttribute('hidden');
+            panel.style.removeProperty('display');
+        }
+    }
+
+    async function generate(event) {
+        event?.preventDefault();
+        if (state.busy) return;
+        const password = byId('currentPassword').value;
+        if (!password) {
+            showMessage('Vui lòng nhập mật khẩu hiện tại.', true);
+            byId('currentPassword').focus();
+            return;
+        }
+
+        setBusy(true);
+        showMessage('');
+        try {
+            const data = await call('/api/auth/recovery-codes', {
+                method: 'POST',
+                body: JSON.stringify({ password }),
+            });
+            byId('currentPassword').value = '';
+            renderCodes(data.codes);
+            renderStatus({
+                total: data.codes.length,
+                remaining: data.codes.length,
+                generated_at: data.generated_at,
+            });
+            showMessage('Đã tạo 8 mã mới. Hãy sao chép hoặc tải về trước khi rời trang.');
+        } catch (error) {
+            if (error.status === 401 && error.message === 'Chưa đăng nhập') {
+                location.href = 'login.html';
+                return;
+            }
+            showMessage(error.message || 'Chưa tạo được mã khôi phục.', true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function init() {
+        byId('generateForm').addEventListener('submit', generate);
+        byId('generateButton').addEventListener('click', generate);
+        byId('copyButton').addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(recoveryText());
+                showMessage('Đã sao chép mã khôi phục.');
+            } catch {
+                showMessage('Trình duyệt không cho sao chép tự động. Hãy dùng nút tải tệp.', true);
+            }
+        });
+        byId('downloadButton').addEventListener('click', () => {
+            const url = URL.createObjectURL(new Blob([recoveryText()], { type: 'text/plain;charset=utf-8' }));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'ma-khoi-phuc-vast.txt';
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(url), 0);
+        });
+
+        try {
+            const me = await call('/api/auth/me');
+            if (!me.user) {
+                location.href = 'login.html';
+                return;
+            }
+            renderStatus(await call('/api/auth/recovery-codes'));
+        } catch (error) {
+            showMessage(error.message || 'Không tải được trạng thái bảo mật.', true);
+        }
+    }
+
+    function startPage() {
+        document.documentElement.style.setProperty('overflow-y', 'auto', 'important');
+        document.body.style.setProperty('overflow-y', 'auto', 'important');
+        window.lucide?.createIcons();
+        init();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startPage, { once: true });
+    } else {
+        startPage();
+    }
+})();
+</script>
+</body>
+</html>

@@ -212,6 +212,15 @@ function createSqliteImpl() {
             don_vi: 'TEXT', ghi_chu: 'TEXT', updated_at: 'TEXT',
         },
         iot_devices: { name: 'TEXT', last_seen: 'TEXT' },
+        users: {
+            email: 'TEXT', reset_salt: 'TEXT', reset_hash: 'TEXT',
+            reset_expires_at: 'TEXT', reset_requested_at: 'TEXT',
+            reset_attempts: 'INTEGER DEFAULT 0', google_sub: 'TEXT',
+        },
+        sessions: {
+            device_id: 'TEXT', device_type: 'TEXT', device_name: 'TEXT', last_seen: 'TEXT',
+        },
+        ponds: { cycle_status: 'TEXT' },
     };
 
     let daThem = 0;
@@ -235,7 +244,6 @@ function createSqliteImpl() {
         }
     }
     if (daThem) console.log(`[DB] Da nang cap ${daThem} cot. Du lieu cu giu nguyen.`);
-
     db.exec(`
 
     -- Gia vat tu THAM KHAO lay tu dong tu tepbac (chung cho moi tai khoan).
@@ -326,22 +334,113 @@ function createSqliteImpl() {
     CREATE TABLE IF NOT EXISTS users (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         phone      TEXT UNIQUE NOT NULL,
+        email      TEXT UNIQUE,
+        google_sub TEXT,
         name       TEXT NOT NULL,
         role       TEXT NOT NULL DEFAULT 'Trại trưởng',
         avatar     TEXT,
         pass_salt  TEXT NOT NULL,
         pass_hash  TEXT NOT NULL,
+        reset_salt TEXT,
+        reset_hash TEXT,
+        reset_expires_at TEXT,
+        reset_requested_at TEXT,
+        reset_attempts INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         last_login TEXT
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_email ON users(email);
 
     CREATE TABLE IF NOT EXISTS sessions (
         token      TEXT PRIMARY KEY,
         user_id    INTEGER NOT NULL,
+        device_id  TEXT,
+        device_type TEXT,
+        device_name TEXT,
         created_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL
+        expires_at TEXT NOT NULL,
+        last_seen  TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_sess_user ON sessions(user_id);
+
+    -- Thiet bi/trinh duyet da cho phep Web Push. endpoint la duy nhat do
+    -- trinh duyet cap; subscription_json chua khoa cong khai va auth secret,
+    -- khong bao gio tra cho tai khoan khac.
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+        endpoint          TEXT PRIMARY KEY,
+        user_id           INTEGER NOT NULL,
+        device_id         TEXT,
+        subscription_json TEXT NOT NULL,
+        created_at        TEXT NOT NULL,
+        updated_at        TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
+
+    CREATE TABLE IF NOT EXISTS login_requests (
+        request_id TEXT PRIMARY KEY,
+        secret_hash TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        user_id INTEGER,
+        device_id TEXT NOT NULL,
+        device_type TEXT NOT NULL,
+        device_name TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        otp_salt TEXT,
+        otp_hash TEXT,
+        otp_expires_at TEXT,
+        otp_requested_at TEXT,
+        otp_attempts INTEGER DEFAULT 0,
+        session_token TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        decided_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_req_user ON login_requests(user_id, status, created_at);
+
+    -- Ma khoi phuc du phong: chi luu SHA-256, ma goc chi hien mot lan.
+    CREATE TABLE IF NOT EXISTS recovery_codes (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        code_hash  TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL,
+        used_at    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_recovery_code_user ON recovery_codes(user_id, used_at);
+
+    -- Yeu cau khoi phuc thu cong khi nguoi dung mat ca Gmail va thiet bi.
+    -- lookup_phone van duoc luu khi khong tim thay tai khoan de API cong khai
+    -- luon tra cung mot kieu phan hoi, tranh lo danh sach so dien thoai.
+    CREATE TABLE IF NOT EXISTS account_recovery_requests (
+        request_id      TEXT PRIMARY KEY,
+        user_id         INTEGER,
+        lookup_phone    TEXT NOT NULL,
+        new_email       TEXT NOT NULL,
+        pond_code       TEXT,
+        device_code     TEXT,
+        note            TEXT,
+        status          TEXT NOT NULL DEFAULT 'pending',
+        otp_salt        TEXT,
+        otp_hash        TEXT,
+        otp_expires_at  TEXT,
+        otp_attempts    INTEGER DEFAULT 0,
+        created_at      TEXT NOT NULL,
+        reviewed_at     TEXT,
+        reviewed_by     INTEGER,
+        review_note     TEXT,
+        completed_at    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_account_recovery_status
+        ON account_recovery_requests(status, created_at);
+
+    CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_id    INTEGER NOT NULL,
+        action      TEXT NOT NULL,
+        target_id   TEXT,
+        detail      TEXT,
+        created_at  TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit_log(created_at);
 
     -- Ao nuoi: truoc day la mang cung trong dashboard.html
     CREATE TABLE IF NOT EXISTS ponds (
@@ -353,6 +452,7 @@ function createSqliteImpl() {
         seed_count    INTEGER,
         stocking_date TEXT,
         status        TEXT DEFAULT 'safe',
+        cycle_status  TEXT DEFAULT 'empty', -- 'stocked' | 'empty' (tach khoi canh bao cam bien)
         note          TEXT,
         trace_code    TEXT UNIQUE,   -- ma QR truy xuat nguon goc
         created_at    TEXT NOT NULL,
@@ -478,6 +578,14 @@ function createSqliteImpl() {
     );
     CREATE INDEX IF NOT EXISTS idx_tsh ON trace_shipments(pond_id, id);
     `);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_user_google_sub ON users(google_sub)');
+    // Du lieu cu chua co trang thai vu nuoi: ao da khai ngay tha/so giong
+    // duoc xem la dang nuoi, con ao moi chi tao tu thiet bi la ao trong.
+    db.exec(`UPDATE ponds SET cycle_status = CASE
+        WHEN stocking_date IS NOT NULL OR seed_count IS NOT NULL THEN 'stocked'
+        ELSE 'empty'
+        END
+        WHERE cycle_status IS NULL OR cycle_status NOT IN ('stocked', 'empty')`);
 
     const q = {
         listDevices: db.prepare('SELECT * FROM iot_devices ORDER BY id'),
@@ -613,30 +721,107 @@ function createSqliteImpl() {
 
         // ---- TAI KHOAN ----
         userByPhone: db.prepare('SELECT * FROM users WHERE phone = ?'),
+        userByEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
+        userByGoogleSub: db.prepare('SELECT * FROM users WHERE google_sub = ?'),
         userAll: db.prepare('SELECT id, phone, name, role, created_at FROM users ORDER BY id'),
         userById: db.prepare('SELECT * FROM users WHERE id = ?'),
-        userInsert: db.prepare(`INSERT INTO users (phone, name, role, avatar, pass_salt, pass_hash, created_at)
-            VALUES (?,?,?,?,?,?,?)`),
-        userUpdate: db.prepare('UPDATE users SET name=?, role=?, avatar=? WHERE id=?'),
+        userInsert: db.prepare(`INSERT INTO users (phone, email, name, role, avatar, pass_salt, pass_hash, created_at)
+            VALUES (?,?,?,?,?,?,?,?)`),
+        userUpdate: db.prepare('UPDATE users SET name=?, role=?, avatar=?, email=? WHERE id=?'),
         userPass: db.prepare('UPDATE users SET pass_salt=?, pass_hash=? WHERE id=?'),
+        userResetSet: db.prepare(`UPDATE users SET reset_salt=?, reset_hash=?, reset_expires_at=?,
+            reset_requested_at=?, reset_attempts=0 WHERE id=?`),
+        userResetAttempt: db.prepare('UPDATE users SET reset_attempts=COALESCE(reset_attempts,0)+1 WHERE id=?'),
+        userResetClear: db.prepare(`UPDATE users SET reset_salt=NULL, reset_hash=NULL,
+            reset_expires_at=NULL, reset_requested_at=NULL, reset_attempts=0 WHERE id=?`),
         userTouch: db.prepare('UPDATE users SET last_login=? WHERE id=?'),
+        userGoogleLink: db.prepare('UPDATE users SET google_sub=? WHERE id=?'),
 
-        sessInsert: db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)'),
+        sessInsert: db.prepare(`INSERT INTO sessions
+            (token, user_id, device_id, device_type, device_name, created_at, expires_at, last_seen)
+            VALUES (?,?,?,?,?,?,?,?)`),
         sessGet: db.prepare('SELECT * FROM sessions WHERE token = ?'),
+        sessListUser: db.prepare('SELECT * FROM sessions WHERE user_id=? ORDER BY created_at DESC'),
+        sessBind: db.prepare(`UPDATE sessions SET device_id=?, device_type=?, device_name=?, last_seen=? WHERE token=?`),
+        sessTouch: db.prepare('UPDATE sessions SET last_seen=? WHERE token=?'),
+        sessSetExpiry: db.prepare('UPDATE sessions SET expires_at=? WHERE token=?'),
+        sessDeleteDevice: db.prepare('DELETE FROM sessions WHERE user_id=? AND device_id=?'),
+        sessDeleteType: db.prepare('DELETE FROM sessions WHERE user_id=? AND device_type=?'),
         sessDelete: db.prepare('DELETE FROM sessions WHERE token = ?'),
         sessDeleteUser: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
         sessPurge: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
+
+        pushUpsert: db.prepare(`INSERT INTO push_subscriptions
+            (endpoint,user_id,device_id,subscription_json,created_at,updated_at)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,
+              device_id=excluded.device_id,subscription_json=excluded.subscription_json,
+              updated_at=excluded.updated_at`),
+        pushListUser: db.prepare('SELECT * FROM push_subscriptions WHERE user_id=? ORDER BY updated_at DESC'),
+        pushListAll: db.prepare('SELECT * FROM push_subscriptions ORDER BY updated_at DESC'),
+        pushDelete: db.prepare('DELETE FROM push_subscriptions WHERE endpoint=? AND user_id=?'),
+        pushDeleteEndpoint: db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?'),
+
+        loginReqInsert: db.prepare(`INSERT INTO login_requests
+            (request_id, secret_hash, kind, user_id, device_id, device_type, device_name, status, created_at, expires_at)
+            VALUES (?,?,?,?,?,?,?,'pending',?,?)`),
+        loginReqGet: db.prepare('SELECT * FROM login_requests WHERE request_id=?'),
+        loginReqPending: db.prepare(`SELECT request_id, kind, device_id, device_type, device_name, created_at, expires_at
+            FROM login_requests WHERE user_id=? AND device_type=? AND device_id<>?
+            AND status='pending' AND expires_at>? ORDER BY created_at DESC`),
+        loginReqOtp: db.prepare(`UPDATE login_requests SET otp_salt=?, otp_hash=?, otp_expires_at=?,
+            otp_requested_at=?, otp_attempts=0 WHERE request_id=?`),
+        loginReqAttempt: db.prepare('UPDATE login_requests SET otp_attempts=COALESCE(otp_attempts,0)+1 WHERE request_id=?'),
+        loginReqResolve: db.prepare(`UPDATE login_requests SET status=?, session_token=?, decided_at=? WHERE request_id=?`),
+        loginReqClaim: db.prepare('UPDATE login_requests SET user_id=? WHERE request_id=? AND user_id IS NULL'),
+        loginReqConsume: db.prepare(`UPDATE login_requests SET status='consumed', session_token=NULL, decided_at=? WHERE request_id=?`),
+        loginReqPurge: db.prepare(`DELETE FROM login_requests WHERE expires_at<? OR (status<>'pending' AND decided_at<?)`),
+
+        recoveryCodeDeleteUser: db.prepare('DELETE FROM recovery_codes WHERE user_id=?'),
+        recoveryCodeInsert: db.prepare(`INSERT INTO recovery_codes (user_id, code_hash, created_at, used_at)
+            VALUES (?,?,?,NULL)`),
+        recoveryCodeStatus: db.prepare(`SELECT COUNT(*) AS total,
+            SUM(CASE WHEN used_at IS NULL THEN 1 ELSE 0 END) AS remaining,
+            MAX(created_at) AS generated_at FROM recovery_codes WHERE user_id=?`),
+        recoveryCodeGet: db.prepare('SELECT * FROM recovery_codes WHERE code_hash=? AND used_at IS NULL'),
+        recoveryCodeUse: db.prepare('UPDATE recovery_codes SET used_at=? WHERE id=? AND used_at IS NULL'),
+
+        accountRecoveryInsert: db.prepare(`INSERT INTO account_recovery_requests
+            (request_id,user_id,lookup_phone,new_email,pond_code,device_code,note,status,created_at)
+            VALUES (?,?,?,?,?,?,?,'pending',?)`),
+        accountRecoveryGet: db.prepare('SELECT * FROM account_recovery_requests WHERE request_id=?'),
+        accountRecoveryList: db.prepare(`SELECT r.*, u.name AS user_name, u.email AS old_email
+            FROM account_recovery_requests r LEFT JOIN users u ON u.id=r.user_id
+            ORDER BY CASE r.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, r.created_at DESC LIMIT ?`),
+        accountRecoveryApprove: db.prepare(`UPDATE account_recovery_requests SET status='approved',
+            otp_salt=?,otp_hash=?,otp_expires_at=?,otp_attempts=0,reviewed_at=?,reviewed_by=?,review_note=?
+            WHERE request_id=? AND status='pending'`),
+        accountRecoveryReject: db.prepare(`UPDATE account_recovery_requests SET status='rejected',
+            reviewed_at=?,reviewed_by=?,review_note=?,otp_salt=NULL,otp_hash=NULL,otp_expires_at=NULL
+            WHERE request_id=? AND status='pending'`),
+        accountRecoveryAttempt: db.prepare(`UPDATE account_recovery_requests
+            SET otp_attempts=COALESCE(otp_attempts,0)+1 WHERE request_id=?`),
+        accountRecoveryComplete: db.prepare(`UPDATE account_recovery_requests SET status='completed',
+            completed_at=?,otp_salt=NULL,otp_hash=NULL,otp_expires_at=NULL WHERE request_id=? AND status='approved'`),
+        accountRecoveryBackToPending: db.prepare(`UPDATE account_recovery_requests SET status='pending',
+            reviewed_at=NULL,reviewed_by=NULL,review_note=NULL,otp_salt=NULL,otp_hash=NULL,otp_expires_at=NULL
+            WHERE request_id=? AND status='approved'`),
+        adminAuditInsert: db.prepare(`INSERT INTO admin_audit_log
+            (admin_id,action,target_id,detail,created_at) VALUES (?,?,?,?,?)`),
+        adminAuditList: db.prepare('SELECT * FROM admin_audit_log ORDER BY id DESC LIMIT ?'),
+        userEmailReplace: db.prepare('UPDATE users SET email=?, google_sub=NULL WHERE id=?'),
 
         // ---- AO NUOI ----
         pondList: db.prepare('SELECT * FROM ponds WHERE user_id = ? ORDER BY created_at'),
         pondGet: db.prepare('SELECT * FROM ponds WHERE pond_id = ?'),
         pondByTrace: db.prepare('SELECT * FROM ponds WHERE trace_code = ?'),
         pondInsert: db.prepare(`INSERT INTO ponds
-            (pond_id, user_id, name, area_m2, seed_type, seed_count, stocking_date, status, note, trace_code, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`),
+            (pond_id, user_id, name, area_m2, seed_type, seed_count, stocking_date, status, cycle_status, note, trace_code, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`),
         pondUpdate: db.prepare(`UPDATE ponds SET
-            name=?, area_m2=?, seed_type=?, seed_count=?, stocking_date=?, status=?, note=?, updated_at=?
+            name=?, area_m2=?, seed_type=?, seed_count=?, stocking_date=?, status=?, cycle_status=?, note=?, updated_at=?
             WHERE pond_id=? AND user_id=?`),
+        pondSetCycleStatus: db.prepare('UPDATE ponds SET cycle_status=?, updated_at=? WHERE pond_id=?'),
         pondDelete: db.prepare('DELETE FROM ponds WHERE pond_id=? AND user_id=?'),
 
         // ---- SO SACH ----
@@ -698,8 +883,8 @@ function createSqliteImpl() {
         updateDevice: (d) => q.updateDevice.run(d.device_token, d.pond_id, d.name, d.device_id),
         touchDevice: (id, mode) => q.touchDevice.run(nowIso(), mode, id),
 
-        /** Gan thiet bi ESP32 vao mot ao. Day la cai noi web voi phan cung. */
-        deviceSetPond: (deviceId, pondId) => q.setDevicePond.run(pondId, deviceId).changes,
+        /** Gan thiet bi ESP32 vao mot ao. Chuoi rong = thiet bi dang tu do. */
+        deviceSetPond: (deviceId, pondId) => q.setDevicePond.run(pondId || '', deviceId).changes,
 
         getLatest: id => q.getLatest.get(id) || null,
         saveLatest(p) {
@@ -903,22 +1088,108 @@ function createSqliteImpl() {
 
         // ================= TAI KHOAN =================
         userByPhone: phone => q.userByPhone.get(phone) || null,
+        userByEmail: email => q.userByEmail.get(email) || null,
+        userByGoogleSub: sub => q.userByGoogleSub.get(sub) || null,
         userList: () => q.userAll.all(),
         userById: id => q.userById.get(id) || null,
         userCreate(u) {
-            const info = q.userInsert.run(u.phone, u.name, u.role, u.avatar || null,
+            const info = q.userInsert.run(u.phone, u.email || null, u.name, u.role, u.avatar || null,
                 u.pass_salt, u.pass_hash, nowIso());
             return Number(info.lastInsertRowid);
         },
-        userUpdate: (id, u) => q.userUpdate.run(u.name, u.role, u.avatar || null, id),
+        userUpdate: (id, u) => q.userUpdate.run(u.name, u.role, u.avatar || null, u.email || null, id),
         userSetPassword: (id, salt, hash) => q.userPass.run(salt, hash, id),
+        userSetReset: (id, salt, hash, expiresAt) =>
+            q.userResetSet.run(salt, hash, expiresAt, nowIso(), id),
+        userIncrementResetAttempts: id => q.userResetAttempt.run(id),
+        userClearReset: id => q.userResetClear.run(id),
         userTouch: id => q.userTouch.run(nowIso(), id),
+        userSetGoogleSub: (id, sub) => q.userGoogleLink.run(sub, id),
 
-        sessionCreate: (token, userId, expiresAt) => q.sessInsert.run(token, userId, nowIso(), expiresAt),
+        sessionCreate(token, userId, expiresAt, meta = {}) {
+            const now = nowIso();
+            q.sessInsert.run(token, userId, meta.device_id || null, meta.device_type || null,
+                meta.device_name || null, now, expiresAt, now);
+        },
         sessionGet: token => q.sessGet.get(token) || null,
+        sessionListUser: userId => q.sessListUser.all(userId),
+        sessionBind: (token, meta) => q.sessBind.run(meta.device_id, meta.device_type,
+            meta.device_name || null, nowIso(), token).changes,
+        sessionTouch: token => q.sessTouch.run(nowIso(), token).changes,
+        sessionSetExpiry: (token, expiresAt) => q.sessSetExpiry.run(expiresAt, token).changes,
+        sessionDeleteByDevice: (userId, deviceId) => q.sessDeleteDevice.run(userId, deviceId).changes,
+        sessionDeleteByType: (userId, type) => q.sessDeleteType.run(userId, type).changes,
         sessionDelete: token => q.sessDelete.run(token),
         sessionDeleteByUser: userId => q.sessDeleteUser.run(userId),
         sessionPurgeExpired: () => q.sessPurge.run(nowIso()),
+
+        pushSubscriptionUpsert(userId, deviceId, subscription) {
+            const endpoint = String(subscription && subscription.endpoint || '');
+            if (!endpoint) return 0;
+            const now = nowIso();
+            return q.pushUpsert.run(endpoint, userId, deviceId || null,
+                JSON.stringify(subscription), now, now).changes;
+        },
+        pushSubscriptionListUser: userId => q.pushListUser.all(userId),
+        pushSubscriptionListAll: () => q.pushListAll.all(),
+        pushSubscriptionDelete: (userId, endpoint) => q.pushDelete.run(endpoint, userId).changes,
+        pushSubscriptionDeleteEndpoint: endpoint => q.pushDeleteEndpoint.run(endpoint).changes,
+
+        loginRequestCreate(r) {
+            q.loginReqInsert.run(r.request_id, r.secret_hash, r.kind, r.user_id || null,
+                r.device_id, r.device_type, r.device_name || null, nowIso(), r.expires_at);
+        },
+        loginRequestGet: id => q.loginReqGet.get(id) || null,
+        loginRequestPending: (userId, type, deviceId) =>
+            q.loginReqPending.all(userId, type, deviceId, nowIso()),
+        loginRequestSetOtp: (id, salt, hash, expiresAt) =>
+            q.loginReqOtp.run(salt, hash, expiresAt, nowIso(), id).changes,
+        loginRequestAttempt: id => q.loginReqAttempt.run(id).changes,
+        loginRequestResolve: (id, status, token = null) =>
+            q.loginReqResolve.run(status, token, nowIso(), id).changes,
+        loginRequestClaim: (id, userId) => q.loginReqClaim.run(userId, id).changes,
+        loginRequestConsume: id => q.loginReqConsume.run(nowIso(), id).changes,
+        loginRequestPurge() {
+            const old = new Date(Date.now() - 86400000).toISOString();
+            return q.loginReqPurge.run(nowIso(), old).changes;
+        },
+
+        recoveryCodeReplace(userId, hashes) {
+            db.exec('BEGIN');
+            try {
+                q.recoveryCodeDeleteUser.run(userId);
+                const now = nowIso();
+                for (const hash of hashes) q.recoveryCodeInsert.run(userId, hash, now);
+                db.exec('COMMIT');
+            } catch (e) {
+                db.exec('ROLLBACK');
+                throw e;
+            }
+        },
+        recoveryCodeStatus(userId) {
+            const r = q.recoveryCodeStatus.get(userId) || {};
+            return { total: Number(r.total || 0), remaining: Number(r.remaining || 0), generated_at: r.generated_at || null };
+        },
+        recoveryCodeGet: hash => q.recoveryCodeGet.get(hash) || null,
+        recoveryCodeUse: id => q.recoveryCodeUse.run(nowIso(), id).changes,
+
+        accountRecoveryCreate(r) {
+            q.accountRecoveryInsert.run(r.request_id, r.user_id || null, r.lookup_phone,
+                r.new_email, r.pond_code || null, r.device_code || null, r.note || null, nowIso());
+        },
+        accountRecoveryGet: id => q.accountRecoveryGet.get(id) || null,
+        accountRecoveryList: (limit = 100) => q.accountRecoveryList.all(limit),
+        accountRecoveryApprove: (id, adminId, salt, hash, expiresAt, note) =>
+            q.accountRecoveryApprove.run(salt, hash, expiresAt, nowIso(), adminId, note || null, id).changes,
+        accountRecoveryReject: (id, adminId, note) =>
+            q.accountRecoveryReject.run(nowIso(), adminId, note || null, id).changes,
+        accountRecoveryAttempt: id => q.accountRecoveryAttempt.run(id).changes,
+        accountRecoveryComplete: id => q.accountRecoveryComplete.run(nowIso(), id).changes,
+        accountRecoveryBackToPending: id => q.accountRecoveryBackToPending.run(id).changes,
+        adminAuditCreate: (adminId, action, targetId, detail) =>
+            q.adminAuditInsert.run(adminId, action, targetId || null, detail || null, nowIso()),
+        adminAuditList: (limit = 100) => q.adminAuditList.all(limit),
+        userReplaceEmail: (id, email) => q.userEmailReplace.run(email, id).changes,
 
         // ================= AO NUOI =================
         pondList: userId => q.pondList.all(userId),
@@ -926,11 +1197,13 @@ function createSqliteImpl() {
         pondByTrace: code => q.pondByTrace.get(code) || null,
         pondCreate(p) {
             q.pondInsert.run(p.pond_id, p.user_id, p.name, p.area_m2, p.seed_type,
-                p.seed_count, p.stocking_date, p.status || 'safe', p.note || null,
+                p.seed_count, p.stocking_date, p.status || 'safe', p.cycle_status || 'empty', p.note || null,
                 p.trace_code, nowIso(), nowIso());
         },
         pondUpdate: (pondId, userId, p) => q.pondUpdate.run(p.name, p.area_m2, p.seed_type,
-            p.seed_count, p.stocking_date, p.status || 'safe', p.note || null, nowIso(), pondId, userId).changes,
+            p.seed_count, p.stocking_date, p.status || 'safe', p.cycle_status || 'empty',
+            p.note || null, nowIso(), pondId, userId).changes,
+        pondSetCycleStatus: (pondId, value) => q.pondSetCycleStatus.run(value, nowIso(), pondId).changes,
         pondDelete: (pondId, userId) => q.pondDelete.run(pondId, userId).changes,
 
         // ================= SO SACH =================
@@ -1028,6 +1301,11 @@ function createJsonImpl() {
         // --- TAI KHOAN & DU LIEU NGUOI DUNG ---
         users: [],         // [{id, phone, name, role, avatar, pass_salt, pass_hash, ...}]
         sessions: {},      // { token: {user_id, created_at, expires_at} }
+        loginRequests: {}, // { request_id: {..yeu cau chuyen thiet bi / QR..} }
+        recoveryCodes: [], // [{id,user_id,code_hash,created_at,used_at}]
+        accountRecoveryRequests: {},
+        adminAuditLog: [],
+        pushSubscriptions: [],
         ponds: {},         // { pond_id: {...} }
         transactions: [],  // so sach
         aiLogs: [],        // nhat ky
@@ -1084,7 +1362,7 @@ function createJsonImpl() {
         deviceSetPond(deviceId, pondId) {
             const dev = data.devices.find(x => x.device_id === deviceId);
             if (!dev) return 0;
-            dev.pond_id = pondId;
+            dev.pond_id = pondId || '';
             save();
             return 1;
         },
@@ -1292,32 +1570,117 @@ function createJsonImpl() {
 
         // ================= TAI KHOAN =================
         userByPhone: phone => data.users.find(u => u.phone === phone) || null,
+        userByEmail: email => data.users.find(u => u.email === email) || null,
+        userByGoogleSub: sub => data.users.find(u => u.google_sub === sub) || null,
         userList: () => data.users.map(u => ({ id: u.id, phone: u.phone, name: u.name, role: u.role, created_at: u.created_at })),
         userById: id => data.users.find(u => u.id === id) || null,
         userCreate(u) {
             const id = ++data.seq.user;
-            data.users.push({ id, ...u, avatar: u.avatar || null, created_at: nowIso(), last_login: null });
+            data.users.push({ id, ...u, email: u.email || null, avatar: u.avatar || null,
+                google_sub: u.google_sub || null,
+                reset_salt: null, reset_hash: null, reset_expires_at: null,
+                reset_requested_at: null, reset_attempts: 0,
+                created_at: nowIso(), last_login: null });
             save();
             return id;
         },
         userUpdate(id, u) {
             const x = data.users.find(v => v.id === id);
-            if (x) { x.name = u.name; x.role = u.role; x.avatar = u.avatar || null; save(); }
+            if (x) {
+                x.name = u.name; x.role = u.role; x.avatar = u.avatar || null;
+                x.email = u.email || null; save();
+            }
         },
         userSetPassword(id, salt, hash) {
             const x = data.users.find(v => v.id === id);
             if (x) { x.pass_salt = salt; x.pass_hash = hash; save(); }
         },
+        userSetReset(id, salt, hash, expiresAt) {
+            const x = data.users.find(v => v.id === id);
+            if (x) {
+                x.reset_salt = salt;
+                x.reset_hash = hash;
+                x.reset_expires_at = expiresAt;
+                x.reset_requested_at = nowIso();
+                x.reset_attempts = 0;
+                save();
+            }
+        },
+        userIncrementResetAttempts(id) {
+            const x = data.users.find(v => v.id === id);
+            if (x) { x.reset_attempts = (x.reset_attempts || 0) + 1; save(); }
+        },
+        userClearReset(id) {
+            const x = data.users.find(v => v.id === id);
+            if (x) {
+                x.reset_salt = null; x.reset_hash = null; x.reset_expires_at = null;
+                x.reset_requested_at = null; x.reset_attempts = 0; save();
+            }
+        },
         userTouch(id) {
             const x = data.users.find(v => v.id === id);
             if (x) { x.last_login = nowIso(); save(); }
         },
+        userSetGoogleSub(id, sub) {
+            const x = data.users.find(v => v.id === id);
+            if (!x) return;
+            const trung = data.users.find(v => v.id !== id && v.google_sub === sub);
+            if (trung) throw new Error('google_sub da ton tai');
+            x.google_sub = sub;
+            save();
+        },
+        userReplaceEmail(id, email) {
+            const x = data.users.find(v => v.id === id);
+            if (!x) return 0;
+            x.email = email;
+            x.google_sub = null;
+            save();
+            return 1;
+        },
 
-        sessionCreate(token, userId, expiresAt) {
-            data.sessions[token] = { token, user_id: userId, created_at: nowIso(), expires_at: expiresAt };
+        sessionCreate(token, userId, expiresAt, meta = {}) {
+            const now = nowIso();
+            data.sessions[token] = {
+                token, user_id: userId, device_id: meta.device_id || null,
+                device_type: meta.device_type || null, device_name: meta.device_name || null,
+                created_at: now, expires_at: expiresAt, last_seen: now,
+            };
             save();
         },
         sessionGet: token => data.sessions[token] || null,
+        sessionListUser: userId => Object.values(data.sessions)
+            .filter(s => s.user_id === userId)
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+        sessionBind(token, meta) {
+            const s = data.sessions[token]; if (!s) return 0;
+            Object.assign(s, { ...meta, last_seen: nowIso() }); save(); return 1;
+        },
+        sessionTouch(token) {
+            const s = data.sessions[token]; if (!s) return 0;
+            s.last_seen = nowIso(); save(); return 1;
+        },
+        sessionSetExpiry(token, expiresAt) {
+            const s = data.sessions[token]; if (!s) return 0;
+            s.expires_at = expiresAt; save(); return 1;
+        },
+        sessionDeleteByDevice(userId, deviceId) {
+            let n = 0;
+            for (const t of Object.keys(data.sessions)) {
+                if (data.sessions[t].user_id === userId && data.sessions[t].device_id === deviceId) {
+                    delete data.sessions[t]; n++;
+                }
+            }
+            if (n) save(); return n;
+        },
+        sessionDeleteByType(userId, type) {
+            let n = 0;
+            for (const t of Object.keys(data.sessions)) {
+                if (data.sessions[t].user_id === userId && data.sessions[t].device_type === type) {
+                    delete data.sessions[t]; n++;
+                }
+            }
+            if (n) save(); return n;
+        },
         sessionDelete(token) { delete data.sessions[token]; save(); },
         sessionDeleteByUser(userId) {
             for (const t of Object.keys(data.sessions)) {
@@ -1334,6 +1697,171 @@ function createJsonImpl() {
             if (doi) save();
         },
 
+        pushSubscriptionUpsert(userId, deviceId, subscription) {
+            const endpoint = String(subscription && subscription.endpoint || '');
+            if (!endpoint) return 0;
+            const list = data.pushSubscriptions || (data.pushSubscriptions = []);
+            const now = nowIso();
+            const row = list.find(x => x.endpoint === endpoint);
+            if (row) Object.assign(row, {
+                user_id: userId, device_id: deviceId || null,
+                subscription_json: JSON.stringify(subscription), updated_at: now,
+            });
+            else list.push({
+                endpoint, user_id: userId, device_id: deviceId || null,
+                subscription_json: JSON.stringify(subscription), created_at: now, updated_at: now,
+            });
+            save(); return 1;
+        },
+        pushSubscriptionListUser(userId) {
+            return (data.pushSubscriptions || []).filter(x => x.user_id === userId);
+        },
+        pushSubscriptionListAll() { return (data.pushSubscriptions || []).slice(); },
+        pushSubscriptionDelete(userId, endpoint) {
+            const before = (data.pushSubscriptions || []).length;
+            data.pushSubscriptions = (data.pushSubscriptions || [])
+                .filter(x => !(x.user_id === userId && x.endpoint === endpoint));
+            if (data.pushSubscriptions.length !== before) save();
+            return before - data.pushSubscriptions.length;
+        },
+        pushSubscriptionDeleteEndpoint(endpoint) {
+            const before = (data.pushSubscriptions || []).length;
+            data.pushSubscriptions = (data.pushSubscriptions || []).filter(x => x.endpoint !== endpoint);
+            if (data.pushSubscriptions.length !== before) save();
+            return before - data.pushSubscriptions.length;
+        },
+
+        loginRequestCreate(r) {
+            data.loginRequests[r.request_id] = {
+                ...r, user_id: r.user_id || null, status: 'pending',
+                otp_salt: null, otp_hash: null, otp_expires_at: null,
+                otp_requested_at: null, otp_attempts: 0, session_token: null,
+                created_at: nowIso(), decided_at: null,
+            };
+            save();
+        },
+        loginRequestGet: id => data.loginRequests[id] || null,
+        loginRequestPending(userId, type, deviceId) {
+            const now = nowIso();
+            return Object.values(data.loginRequests).filter(r => r.user_id === userId
+                && r.device_type === type && r.device_id !== deviceId
+                && r.status === 'pending' && r.expires_at > now)
+                .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+        },
+        loginRequestSetOtp(id, salt, hash, expiresAt) {
+            const r = data.loginRequests[id]; if (!r) return 0;
+            Object.assign(r, { otp_salt: salt, otp_hash: hash, otp_expires_at: expiresAt,
+                otp_requested_at: nowIso(), otp_attempts: 0 }); save(); return 1;
+        },
+        loginRequestAttempt(id) {
+            const r = data.loginRequests[id]; if (!r) return 0;
+            r.otp_attempts = (r.otp_attempts || 0) + 1; save(); return 1;
+        },
+        loginRequestResolve(id, status, token = null) {
+            const r = data.loginRequests[id]; if (!r) return 0;
+            Object.assign(r, { status, session_token: token, decided_at: nowIso() }); save(); return 1;
+        },
+        loginRequestClaim(id, userId) {
+            const r = data.loginRequests[id]; if (!r || r.user_id) return 0;
+            r.user_id = userId; save(); return 1;
+        },
+        loginRequestConsume(id) {
+            const r = data.loginRequests[id]; if (!r) return 0;
+            Object.assign(r, { status: 'consumed', session_token: null, decided_at: nowIso() }); save(); return 1;
+        },
+        loginRequestPurge() {
+            const now = nowIso(); const old = new Date(Date.now() - 86400000).toISOString(); let n = 0;
+            for (const id of Object.keys(data.loginRequests)) {
+                const r = data.loginRequests[id];
+                if (r.expires_at < now || (r.status !== 'pending' && r.decided_at < old)) {
+                    delete data.loginRequests[id]; n++;
+                }
+            }
+            if (n) save(); return n;
+        },
+
+        recoveryCodeReplace(userId, hashes) {
+            data.recoveryCodes = (data.recoveryCodes || []).filter(c => c.user_id !== userId);
+            const now = nowIso();
+            let nextId = data.recoveryCodes.reduce((m, c) => Math.max(m, Number(c.id) || 0), 0);
+            for (const code_hash of hashes) {
+                data.recoveryCodes.push({ id: ++nextId, user_id: userId, code_hash, created_at: now, used_at: null });
+            }
+            save();
+        },
+        recoveryCodeStatus(userId) {
+            const rows = (data.recoveryCodes || []).filter(c => c.user_id === userId);
+            return {
+                total: rows.length,
+                remaining: rows.filter(c => !c.used_at).length,
+                generated_at: rows.reduce((m, c) => !m || c.created_at > m ? c.created_at : m, null),
+            };
+        },
+        recoveryCodeGet: hash => (data.recoveryCodes || []).find(c => c.code_hash === hash && !c.used_at) || null,
+        recoveryCodeUse(id) {
+            const x = (data.recoveryCodes || []).find(c => c.id === id && !c.used_at);
+            if (!x) return 0;
+            x.used_at = nowIso(); save(); return 1;
+        },
+
+        accountRecoveryCreate(r) {
+            data.accountRecoveryRequests[r.request_id] = {
+                ...r, user_id: r.user_id || null, status: 'pending', created_at: nowIso(),
+                otp_salt: null, otp_hash: null, otp_expires_at: null, otp_attempts: 0,
+                reviewed_at: null, reviewed_by: null, review_note: null, completed_at: null,
+            };
+            save();
+        },
+        accountRecoveryGet: id => data.accountRecoveryRequests[id] || null,
+        accountRecoveryList(limit = 100) {
+            const rank = { pending: 0, approved: 1 };
+            return Object.values(data.accountRecoveryRequests || {}).map(r => {
+                const u = data.users.find(x => x.id === r.user_id);
+                return { ...r, user_name: u?.name || null, old_email: u?.email || null };
+            }).sort((a, b) => (rank[a.status] ?? 2) - (rank[b.status] ?? 2)
+                || String(b.created_at).localeCompare(String(a.created_at))).slice(0, limit);
+        },
+        accountRecoveryApprove(id, adminId, salt, hash, expiresAt, note) {
+            const r = data.accountRecoveryRequests[id];
+            if (!r || r.status !== 'pending') return 0;
+            Object.assign(r, { status: 'approved', otp_salt: salt, otp_hash: hash,
+                otp_expires_at: expiresAt, otp_attempts: 0, reviewed_at: nowIso(),
+                reviewed_by: adminId, review_note: note || null });
+            save(); return 1;
+        },
+        accountRecoveryReject(id, adminId, note) {
+            const r = data.accountRecoveryRequests[id];
+            if (!r || r.status !== 'pending') return 0;
+            Object.assign(r, { status: 'rejected', reviewed_at: nowIso(), reviewed_by: adminId,
+                review_note: note || null, otp_salt: null, otp_hash: null, otp_expires_at: null });
+            save(); return 1;
+        },
+        accountRecoveryAttempt(id) {
+            const r = data.accountRecoveryRequests[id]; if (!r) return 0;
+            r.otp_attempts = (r.otp_attempts || 0) + 1; save(); return 1;
+        },
+        accountRecoveryComplete(id) {
+            const r = data.accountRecoveryRequests[id];
+            if (!r || r.status !== 'approved') return 0;
+            Object.assign(r, { status: 'completed', completed_at: nowIso(), otp_salt: null,
+                otp_hash: null, otp_expires_at: null }); save(); return 1;
+        },
+        accountRecoveryBackToPending(id) {
+            const r = data.accountRecoveryRequests[id];
+            if (!r || r.status !== 'approved') return 0;
+            Object.assign(r, { status: 'pending', reviewed_at: null, reviewed_by: null,
+                review_note: null, otp_salt: null, otp_hash: null, otp_expires_at: null });
+            save(); return 1;
+        },
+        adminAuditCreate(adminId, action, targetId, detail) {
+            const rows = data.adminAuditLog || (data.adminAuditLog = []);
+            rows.push({ id: rows.length + 1, admin_id: adminId, action,
+                target_id: targetId || null, detail: detail || null, created_at: nowIso() });
+            if (rows.length > 5000) data.adminAuditLog = rows.slice(-5000);
+            save();
+        },
+        adminAuditList: (limit = 100) => (data.adminAuditLog || []).slice(-limit).reverse(),
+
         // ================= AO NUOI =================
         pondList: userId => Object.values(data.ponds)
             .filter(p => p.user_id === userId)
@@ -1341,7 +1869,13 @@ function createJsonImpl() {
         pondGet: pondId => data.ponds[pondId] || null,
         pondByTrace: code => Object.values(data.ponds).find(p => p.trace_code === code) || null,
         pondCreate(p) {
-            data.ponds[p.pond_id] = { ...p, status: p.status || 'safe', created_at: nowIso(), updated_at: nowIso() };
+            data.ponds[p.pond_id] = {
+                ...p,
+                status: p.status || 'safe',
+                cycle_status: p.cycle_status || 'empty',
+                created_at: nowIso(),
+                updated_at: nowIso(),
+            };
             save();
         },
         pondUpdate(pondId, userId, p) {
@@ -1349,9 +1883,18 @@ function createJsonImpl() {
             if (!x || x.user_id !== userId) return 0;
             Object.assign(x, {
                 name: p.name, area_m2: p.area_m2, seed_type: p.seed_type, seed_count: p.seed_count,
-                stocking_date: p.stocking_date, status: p.status || 'safe', note: p.note || null,
+                stocking_date: p.stocking_date, status: p.status || 'safe',
+                cycle_status: p.cycle_status || 'empty', note: p.note || null,
                 updated_at: nowIso(),
             });
+            save();
+            return 1;
+        },
+        pondSetCycleStatus(pondId, value) {
+            const x = data.ponds[pondId];
+            if (!x) return 0;
+            x.cycle_status = value;
+            x.updated_at = nowIso();
             save();
             return 1;
         },

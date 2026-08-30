@@ -43,6 +43,13 @@ function feedModule() {
             setupAvgWeightG: '',
             setupStockMaxKg: '',
             setupMealTimes: '06:00, 10:00, 14:00, 18:00',
+
+            // Modal ghi nhan so cam vua do them vao thung
+            showRefillModal: false,
+            refillPondId: '',
+            refillAmountKg: '',
+            refillBusy: false,
+            refillError: '',
         },
 
         /* ================= KHOI DONG ================= */
@@ -53,7 +60,9 @@ function feedModule() {
 
         async feedFetch() {
             try {
-                const r = await fetch(`${API}/api/feed/plans`, { cache: 'no-store' });
+                const r = await fetch(`${API}/api/feed/plans`, {
+                    cache: 'no-store', headers: window.VAST_DEVICE.authHeaders(),
+                });
                 const d = await r.json();
                 if (d && d.ok) {
                     const m = {};
@@ -118,6 +127,78 @@ function feedModule() {
             if (pct <= 15) return 'text-red-600';
             if (pct <= 35) return 'text-amber-600';
             return 'text-green-600';
+        },
+
+        /** Khoang trong con lai trong thung (kg); null neu chua khai bao suc chua. */
+        feedRefillRemainingKg(pondId) {
+            const p = this.feedPlan(pondId || this.feed.refillPondId);
+            if (!p || !p.ok || !(Number(p.feedStockMaxKg) > 0)) return null;
+            const conLai = Number(p.feedStockMaxKg) - Number(p.feedStockKg || 0);
+            return Math.max(0, Math.round(conLai * 100) / 100);
+        },
+
+        /** Mo hop nhap so kg vua do vao thung. */
+        feedOpenRefill(pondId) {
+            const id = pondId || this.selectedPondId;
+            const p = this.feedPlan(id);
+
+            if (!id || !p || !p.ok) {
+                this.showToast?.(this.feedMissingText(id), 'error');
+                return;
+            }
+            if (!(Number(p.feedStockMaxKg) > 0)) {
+                this.showToast?.('Hãy khai báo sức chứa thùng cám trước', 'error');
+                return;
+            }
+
+            const conLai = this.feedRefillRemainingKg(id);
+            if (conLai !== null && conLai <= 0) {
+                this.showToast?.('Thùng cám đang đầy', 'info');
+                return;
+            }
+
+            this.feed.refillPondId = id;
+            this.feed.refillAmountKg = '';
+            this.feed.refillError = '';
+            this.feed.showRefillModal = true;
+            this.$nextTick(() => window.lucide?.createIcons());
+        },
+
+        /** Dien nhanh dung phan suc chua con trong. */
+        feedRefillToMax() {
+            const conLai = this.feedRefillRemainingKg();
+            if (conLai !== null && conLai > 0) this.feed.refillAmountKg = conLai;
+        },
+
+        async feedSubmitRefill() {
+            const id = this.feed.refillPondId;
+            const amount = Number(this.feed.refillAmountKg);
+            const conLai = this.feedRefillRemainingKg();
+
+            this.feed.refillError = '';
+            if (!Number.isFinite(amount) || amount <= 0) {
+                this.feed.refillError = 'Nhập số kg cám vừa đổ vào thùng';
+                return;
+            }
+            if (conLai !== null && amount > conLai) {
+                this.feed.refillError = `Số cám đã nhập vượt quá sức chứa còn lại của thùng. Tối đa ${this.feedNum(conLai)} kg.`;
+                return;
+            }
+
+            this.feed.refillBusy = true;
+            try {
+                const d = await this.feedRefill(id, amount);
+                if (!d) return;
+
+                this.feed.showRefillModal = false;
+                this.feed.refillAmountKg = '';
+                this.showToast?.(
+                    `Đã nạp ${this.feedNum(amount)} kg — trong thùng hiện có ${this.feedNum(d.trong_may_kg)} kg`,
+                    'success'
+                );
+            } finally {
+                this.feed.refillBusy = false;
+            }
         },
 
         /** "Đủ 3,5 ngày" / "Chưa đủ 1 ngày" - cai nguoi nuoi thuc su can biet. */
@@ -213,7 +294,7 @@ function feedModule() {
             try {
                 const r = await fetch(`${API}/api/feed/run`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: window.VAST_DEVICE.authHeaders(true),
                     body: JSON.stringify({ pond_id: id }),
                 });
                 const d = await r.json();
@@ -294,7 +375,7 @@ function feedModule() {
             try {
                 const r = await fetch(`${API}/api/feed/test`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: window.VAST_DEVICE.authHeaders(true),
                     body: JSON.stringify({ pond_id: id, action, ...them }),
                 });
                 const d = await r.json();
@@ -325,7 +406,7 @@ function feedModule() {
             try {
                 const r = await fetch(
                     `${API}/api/feed/command-status?pond_id=${encodeURIComponent(id)}`,
-                    { cache: 'no-store' }
+                    { cache: 'no-store', headers: window.VAST_DEVICE.authHeaders() }
                 );
                 const d = await r.json();
                 if (d.ok) this.feedTest.chanDoan = d;
@@ -446,7 +527,7 @@ function feedModule() {
             try {
                 const r = await fetch(`${API}/api/feed/settings`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: window.VAST_DEVICE.authHeaders(true),
                     body: JSON.stringify(payload),
                 });
                 const d = await r.json();
@@ -464,28 +545,30 @@ function feedModule() {
             }
         },
 
-        /** Nap them cam vao may. */
+        /** Nap them cam vao may. Tra ve du lieu server neu thanh cong. */
         async feedRefill(pondId, kg) {
             const id = pondId || this.selectedPondId;
             const amount = Number(kg);
-            if (!id || !Number.isFinite(amount) || amount <= 0) return false;
+            if (!id || !Number.isFinite(amount) || amount <= 0) return null;
 
             try {
                 const r = await fetch(`${API}/api/feed/refill`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: window.VAST_DEVICE.authHeaders(true),
                     body: JSON.stringify({ pond_id: id, amount_kg: amount }),
                 });
                 const d = await r.json();
                 if (d.ok) {
                     this.feed.plans[id] = d.plan;
-                    return true;
+                    return d;
                 }
-                this.showToast?.(d.error || 'Nạp cám không được', 'error');
-                return false;
+                this.feed.refillError = d.error || 'Nạp cám không được';
+                this.showToast?.(this.feed.refillError, 'error');
+                return null;
             } catch (e) {
+                this.feed.refillError = 'Không kết nối được máy chủ';
                 this.showToast?.('Không kết nối được máy chủ', 'error');
-                return false;
+                return null;
             }
         },
 

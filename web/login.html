@@ -54,13 +54,14 @@
         }
     </script>
     <script src="js/vast-config.js?v=5"></script>
+    <script src="js/device-auth.js?v=1"></script>
     <style>[x-cloak]{display:none!important}</style>
 </head>
 
 <!-- Sửa min-h-screen thành h-screen để ngăn cuộn nếu không cần thiết, và đảm bảo căn giữa tuyệt đối -->
 
 <body
-    class="font-sans bg-brand-bg text-brand-textPrimary w-full h-screen flex flex-col justify-center items-center p-4 sm:p-6"><!--
+    class="font-sans bg-brand-bg text-brand-textPrimary w-full min-h-screen flex flex-col justify-center items-center p-4 sm:p-6"><!--
     KHONG dat hx-boost o day.
 
     Truoc day co  hx-boost="true"  va no lam hong han viec bao loi dang nhap:
@@ -84,8 +85,7 @@
 -->
 
     <!-- Wrapper tổng chứa toàn bộ nội dung, giới hạn chiều cao max-h-full để tránh tràn -->
-    <div
-        class="w-full max-w-[460px] mx-auto flex flex-col justify-center items-center h-full max-h-full overflow-y-auto no-scrollbar py-4">
+    <div class="w-full max-w-[460px] mx-auto py-4">
 
         <div class="w-full">
             <!-- HEADER (Nằm ngoài thẻ trắng) -->
@@ -115,9 +115,208 @@
                         phone: '',
                         password: '',
                         showPassword: false,
-                        showQuenMatKhau: false,
                         dangGui: false,
                         loi: '',
+                        notice: '',
+                        approval: null,
+                        otp: '',
+                        otpSent: false,
+                        qr: null,
+                        qrPoll: null,
+                        googleState: 'loading',
+                        googleMessage: '',
+
+                        apiBase() {
+                            return (window.VAST_CONFIG?.API_BASE || '').replace(/\/$/, '');
+                        },
+
+                        deviceBody() { return window.VAST_DEVICE.get(); },
+                        async saveToken(token) {
+                            try { localStorage.setItem('vast_session_token', token); } catch (e) {}
+                            let next = '';
+                            try { next = localStorage.getItem('vast_pair_return') || ''; localStorage.removeItem('vast_pair_return'); } catch (e) {}
+                            if (next) {
+                                window.location.href = next;
+                                return;
+                            }
+
+                            try {
+                                const response = await fetch(this.apiBase() + '/api/auth/me', {
+                                    headers: {
+                                        ...window.VAST_DEVICE.headers(),
+                                        'X-Session-Token': token
+                                    }
+                                });
+                                const data = await response.json();
+                                window.location.href = data?.user?.is_admin
+                                    ? 'admin-recovery.html'
+                                    : 'dashboard.html';
+                            } catch (e) {
+                                window.location.href = 'dashboard.html';
+                            }
+                        },
+                        handleAuthResult(d) {
+                            if (d.approval_required) {
+                                this.qr = null;
+                                this.approval = d;
+                                this.notice = d.message;
+                                this.pollApproval();
+                                return;
+                            }
+                            if (d.token) this.saveToken(d.token);
+                        },
+                        async initPage() {
+                            try {
+                                const reason = localStorage.getItem('vast_logout_reason');
+                                if (reason) { this.notice = reason; localStorage.removeItem('vast_logout_reason'); }
+                            } catch (e) {}
+                            await this.initGoogle();
+                        },
+                        async pollApproval() {
+                            clearTimeout(this.qrPoll);
+                            if (!this.approval) return;
+                            try {
+                                const r = await fetch(this.apiBase() + '/api/auth/device/status', {
+                                    method: 'POST', headers: {'Content-Type':'application/json'},
+                                    body: JSON.stringify({request_id:this.approval.request_id, request_secret:this.approval.request_secret})
+                                });
+                                const d = await r.json();
+                                if (!r.ok || !d.ok) { this.loi = d.error || 'Yêu cầu đã hết hạn.'; this.approval = null; return; }
+                                if (d.status === 'approved' && d.token) return this.saveToken(d.token);
+                                if (d.status === 'denied') { this.loi = 'Thiết bị đang dùng đã từ chối yêu cầu.'; this.approval = null; return; }
+                                if (d.status === 'expired') { this.loi = 'Yêu cầu đã hết hạn. Vui lòng đăng nhập lại.'; this.approval = null; return; }
+                            } catch (e) {}
+                            this.qrPoll = setTimeout(() => this.pollApproval(), 2500);
+                        },
+                        async sendLoginOtp() {
+                            if (!this.approval) return;
+                            this.dangGui = true; this.loi = '';
+                            try {
+                                const r = await fetch(this.apiBase() + '/api/auth/device/email', {
+                                    method:'POST', headers:{'Content-Type':'application/json'},
+                                    body:JSON.stringify({request_id:this.approval.request_id,request_secret:this.approval.request_secret})
+                                });
+                                const d = await r.json();
+                                if (!r.ok || !d.ok) throw new Error(d.error || 'Không gửi được mã');
+                                this.otpSent = true; this.notice = d.message;
+                            } catch(e) { this.loi = e.message; } finally { this.dangGui = false; }
+                        },
+                        async verifyLoginOtp() {
+                            if (!this.approval || !/^\d{6}$/.test(this.otp)) { this.loi='Vui lòng nhập đủ 6 số'; return; }
+                            this.dangGui = true; this.loi = '';
+                            try {
+                                const r = await fetch(this.apiBase() + '/api/auth/device/email/verify', {
+                                    method:'POST', headers:{'Content-Type':'application/json'},
+                                    body:JSON.stringify({request_id:this.approval.request_id,request_secret:this.approval.request_secret,code:this.otp})
+                                });
+                                const d = await r.json();
+                                if (!r.ok || !d.ok) throw new Error(d.error || 'Mã không đúng');
+                                this.saveToken(d.token);
+                            } catch(e) { this.loi=e.message; } finally { this.dangGui=false; }
+                        },
+                        async startQrLogin() {
+                            this.loi=''; this.qr=null;
+                            try {
+                                const r=await fetch(this.apiBase()+'/api/auth/qr/create', {
+                                    method:'POST',headers:{'Content-Type':'application/json'},
+                                    body:JSON.stringify(this.deviceBody())
+                                });
+                                const d=await r.json(); if(!r.ok||!d.ok) throw new Error(d.error||'Không tạo được QR');
+                                this.qr=d; this.pollQrLogin();
+                            } catch(e){this.loi=e.message;}
+                        },
+                        async pollQrLogin() {
+                            clearTimeout(this.qrPoll); if(!this.qr)return;
+                            try {
+                                const r=await fetch(this.apiBase()+'/api/auth/device/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:this.qr.request_id,request_secret:this.qr.request_secret})});
+                                const d=await r.json();
+                                if(!r.ok||!d.ok){this.loi=d.error||'Mã QR đã hết hiệu lực';this.qr=null;return;}
+                                if(d.status==='approved'&&d.token)return this.saveToken(d.token);
+                                if(['expired','denied'].includes(d.status)){this.loi='Mã QR đã hết hiệu lực';this.qr=null;return;}
+                            } catch(e){}
+                            this.qrPoll=setTimeout(()=>this.pollQrLogin(),2000);
+                        },
+                        qrImage() { return this.qr ? this.apiBase()+'/api/auth/qr/image?id='+encodeURIComponent(this.qr.request_id)+'&secret='+encodeURIComponent(this.qr.request_secret) : ''; },
+
+                        loadGoogleScript() {
+                            if (window.google?.accounts?.id) return Promise.resolve();
+                            return new Promise((resolve, reject) => {
+                                const old = document.getElementById('google-identity-script');
+                                if (old) {
+                                    old.addEventListener('load', resolve, { once: true });
+                                    old.addEventListener('error', reject, { once: true });
+                                    return;
+                                }
+                                const script = document.createElement('script');
+                                script.id = 'google-identity-script';
+                                script.src = 'https://accounts.google.com/gsi/client';
+                                script.async = true;
+                                script.defer = true;
+                                script.onload = resolve;
+                                script.onerror = reject;
+                                document.head.appendChild(script);
+                            });
+                        },
+
+                        async initGoogle() {
+                            try {
+                                const r = await fetch(this.apiBase() + '/api/auth/google/config');
+                                const d = await r.json();
+                                if (!r.ok || !d.ok) throw new Error(d.error || 'Không đọc được cấu hình Google.');
+                                if (!d.enabled || !d.client_id) {
+                                    this.googleState = 'disabled';
+                                    this.googleMessage = 'Đăng nhập Google sẽ hoạt động sau khi cấu hình Client ID.';
+                                    return;
+                                }
+
+                                await this.loadGoogleScript();
+                                window.google.accounts.id.initialize({
+                                    client_id: d.client_id,
+                                    callback: response => this.handleGoogleLogin(response?.credential),
+                                    auto_select: false,
+                                    cancel_on_tap_outside: true
+                                });
+                                const width = Math.max(240, Math.min(400, Math.floor(this.$refs.googleButton.clientWidth || 360)));
+                                this.$refs.googleButton.replaceChildren();
+                                window.google.accounts.id.renderButton(this.$refs.googleButton, {
+                                    type: 'standard',
+                                    theme: 'outline',
+                                    size: 'large',
+                                    text: 'signin_with',
+                                    shape: 'rectangular',
+                                    logo_alignment: 'left',
+                                    width,
+                                    locale: 'vi'
+                                });
+                                this.googleState = 'ready';
+                            } catch (e) {
+                                this.googleState = 'disabled';
+                                this.googleMessage = 'Chưa tải được đăng nhập Google. Bạn vẫn có thể đăng nhập bằng số điện thoại.';
+                            }
+                        },
+
+                        async handleGoogleLogin(credential) {
+                            if (!credential || this.dangGui) return;
+                            this.loi = '';
+                            this.dangGui = true;
+                            try {
+                                const r = await fetch(this.apiBase() + '/api/auth/google', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ credential, ...this.deviceBody() })
+                                });
+                                const d = await r.json();
+                                if (!r.ok || !d.ok) {
+                                    this.loi = d.error || 'Đăng nhập Google không được';
+                                    return;
+                                }
+                                this.handleAuthResult(d);
+                            } catch (e) {
+                                this.loi = 'Không kết nối được máy chủ. Kiểm tra server đã chạy chưa.';
+                            } finally {
+                                this.dangGui = false;
+                            }
+                        },
 
                         async handleLogin() {
                             this.loi = '';
@@ -128,11 +327,11 @@
 
                             this.dangGui = true;
                             try {
-                                const API = (window.VAST_CONFIG?.API_BASE || '').replace(/\/$/, '');
+                                const API = this.apiBase();
                                 const r = await fetch(API + '/api/auth/login', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ phone: this.phone, password: this.password })
+                                    body: JSON.stringify({ phone: this.phone, password: this.password, ...this.deviceBody() })
                                 });
                                 const d = await r.json();
 
@@ -143,8 +342,7 @@
 
                                 // Chi luu MA PHIEN. Ho ten, so sach, ao... deu nam
                                 // tren may chu - dang nhap may nao cung thay.
-                                try { localStorage.setItem('vast_session_token', d.token); } catch (e) {}
-                                window.location.href = 'dashboard.html';
+                                this.handleAuthResult(d);
 
                             } catch (e) {
                                 this.loi = 'Không kết nối được máy chủ. Kiểm tra server đã chạy chưa.';
@@ -152,12 +350,37 @@
                                 this.dangGui = false;
                             }
                         }
-                    }" @submit.prevent="handleLogin()">
+                    }" x-init="initPage()" @submit.prevent="handleLogin()">
 
                     <!-- Bao loi ngay tren form, khong dung alert() -->
                     <div x-show="loi" x-cloak
                         class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 font-medium"
                         x-text="loi"></div>
+                    <div x-show="notice && !loi" x-cloak
+                        class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 font-medium"
+                        x-text="notice"></div>
+
+                    <div x-show="approval" x-cloak class="mb-5 p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl space-y-3">
+                        <div class="flex gap-3 items-start">
+                            <i data-lucide="shield-alert" class="w-6 h-6 text-amber-600 shrink-0"></i>
+                            <div>
+                                <p class="font-black text-amber-900">Cần xác nhận chuyển thiết bị</p>
+                                <p class="text-xs text-amber-800 mt-1">Mở VAST trên thiết bị đang dùng để bấm Đồng ý, hoặc nhận mã tại <b x-text="approval?.email_hint"></b>.</p>
+                            </div>
+                        </div>
+                        <button type="button" @click="sendLoginOtp()" :disabled="dangGui"
+                            class="w-full py-2.5 bg-white border border-amber-300 text-amber-800 rounded-xl font-bold text-sm disabled:opacity-60">
+                            Gửi mã về Gmail
+                        </button>
+                        <div x-show="otpSent" class="flex gap-2">
+                            <input x-model="otp" inputmode="numeric" maxlength="6" placeholder="Nhập 6 số"
+                                class="min-w-0 flex-1 p-3 border-2 border-amber-200 rounded-xl font-black tracking-[.3em] text-center">
+                            <button type="button" @click="verifyLoginOtp()" :disabled="dangGui"
+                                class="px-4 bg-amber-600 text-white rounded-xl font-bold">Xác nhận</button>
+                        </div>
+                        <button type="button" @click="approval=null; otp=''; otpSent=false; notice=''"
+                            class="w-full text-xs font-bold text-slate-500">Hủy yêu cầu</button>
+                    </div>
 
                     <!-- Input Số điện thoại -->
                     <div class="mb-5">
@@ -204,10 +427,10 @@
                          http://10.x.x.x:3000 nen trinh duyet chan thang.
                          ============================================================ -->
                     <div class="flex justify-end items-center mb-6">
-                        <button type="button" @click="showQuenMatKhau = true"
+                        <a href="forgot-password.html"
                             class="text-brand-primary font-bold text-sm hover:underline transition-all">
                             Quên mật khẩu?
-                        </button>
+                        </a>
                     </div>
 
                     <!-- Nút Đăng Nhập -->
@@ -216,19 +439,34 @@
                         Đăng nhập
                     </button>
 
-                    <!-- ============================================================
-                         DA BO NUT "DANG NHAP VOI GOOGLE".
-                         No khong co @click - bam khong xay ra gi ca.
+                    <div class="flex items-center gap-3 my-6" aria-hidden="true">
+                        <span class="h-px flex-1 bg-slate-200"></span>
+                        <span class="text-[11px] sm:text-xs font-bold tracking-wide text-slate-400 whitespace-nowrap">
+                            HOẶC ĐĂNG NHẬP VỚI
+                        </span>
+                        <span class="h-px flex-1 bg-slate-200"></span>
+                    </div>
 
-                         Muon lam that phai co mot du an tren Google Cloud, ma
-                         client, va mot dia chi chuyen huong duoc Google chap nhan.
-                         Google CHI nhan dia chi HTTPS (tru localhost), nen
-                         http://10.x.x.x:3000 se bi tu choi thang.
+                    <div x-show="window.VAST_DEVICE.get().device_type === 'desktop' && !approval" class="mb-5">
+                        <button type="button" @click="startQrLogin()"
+                            class="w-full py-3 border-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl font-bold flex items-center justify-center gap-2">
+                            <i data-lucide="qr-code" class="w-5 h-5"></i> Đăng nhập PC bằng điện thoại
+                        </button>
+                        <div x-show="qr" x-cloak class="mt-3 p-4 border border-slate-200 rounded-2xl text-center bg-white">
+                            <img :src="qrImage()" alt="QR đăng nhập PC" class="w-48 h-48 mx-auto">
+                            <p class="text-xs font-bold text-slate-600 mt-2">Mở camera trên điện thoại đang đăng nhập VAST và quét mã này.</p>
+                            <p class="text-[11px] text-slate-400 mt-1">Mã chỉ dùng một lần và hết hạn sau 10 phút.</p>
+                        </div>
+                    </div>
 
-                         Mot cai nut chet giua trang dang nhap con te hon la khong
-                         co nut nao: nguoi cham do an bam vao la lo ngay.
-                         Lam lai khi nao len VPS co ten mien va HTTPS.
-                         ============================================================ -->
+                    <!-- Google Identity Services tự vẽ nút chính thức vào khung này. -->
+                    <div x-ref="googleButton" x-show="googleState !== 'disabled'"
+                        class="w-full min-h-[44px] flex items-center justify-center"
+                        :class="googleState === 'loading' ? 'rounded-xl border-2 border-slate-200 bg-slate-50 animate-pulse' : ''"
+                        aria-label="Đăng nhập với Google"></div>
+                    <div x-show="googleState === 'disabled'" x-cloak
+                        class="w-full min-h-[44px] px-4 py-3 rounded-xl border-2 border-slate-200 bg-slate-50 text-slate-500 text-xs font-semibold text-center leading-relaxed"
+                        x-text="googleMessage"></div>
 
                     <!-- Liên kết Đăng ký -->
                     <div class="text-center text-slate-500 text-sm sm:text-base font-medium mt-6 sm:mt-8">
@@ -236,65 +474,12 @@
                             class="text-brand-primary font-bold hover:underline transition-all">Đăng ký ngay</a>
                     </div>
                 
-                    <!-- ============================================================
-                         QUEN MAT KHAU
-                         Khong co OTP va khong co email thi KHONG the tu dat lai mat
-                         khau mot cach an toan. "Nhap so dien thoai la doi duoc"
-                         nghia la ai biet so cua chu trai cung chiem duoc tai khoan -
-                         kem theo do la quyen bat tat guong oxy ngoai ao.
-
-                         He thong nay chay tren may cua chinh trai, nen duong dat lai
-                         mat khau dung dan la: ra may chu chay mot lenh.
-                         ============================================================ -->
-                    <div x-show="showQuenMatKhau" x-cloak
-                        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50"
-                        @click.self="showQuenMatKhau = false">
-                        <div class="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl max-h-[90vh] overflow-y-auto no-scrollbar">
-                            <div class="flex justify-between items-start mb-4">
-                                <h3 class="font-bold text-lg text-slate-800">Quên mật khẩu</h3>
-                                <button type="button" @click="showQuenMatKhau = false"
-                                    class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg">
-                                    <i data-lucide="x" class="w-5 h-5"></i>
-                                </button>
-                            </div>
-
-                            <p class="text-sm text-slate-600 font-medium mb-4 leading-relaxed">
-                                Hệ thống chưa gửi được mã OTP qua tin nhắn, nên không thể tự đặt lại
-                                mật khẩu từ trang này. Cách đặt lại: <b class="text-slate-800">ra máy
-                                đang chạy server</b> và chạy một lệnh.
-                            </p>
-
-                            <div class="bg-slate-900 rounded-xl p-3.5 mb-3 overflow-x-auto">
-                                <code class="text-[12.5px] text-green-300 font-mono whitespace-pre">cd server
-node tools/doi-mat-khau.js 0123456789</code>
-                            </div>
-
-                            <p class="text-xs text-slate-500 font-medium mb-4 leading-relaxed">
-                                Thay số trên bằng số điện thoại của bạn. Lệnh sẽ in ra một mật khẩu
-                                tạm — đăng nhập xong nhớ vào Cài đặt đổi lại mật khẩu riêng. Xem
-                                danh sách tài khoản bằng
-                                <code class="bg-slate-100 px-1 rounded">--list</code>.
-                            </p>
-
-                            <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl mb-4">
-                                <p class="text-[12px] text-amber-800 font-medium leading-relaxed">
-                                    Đổi xong thì <b>mọi máy đang đăng nhập đều bị đăng xuất</b> — đó
-                                    chính là mục đích của việc đổi mật khẩu.
-                                </p>
-                            </div>
-
-                            <button type="button" @click="showQuenMatKhau = false"
-                                class="w-full py-3 bg-brand-primary hover:bg-brand-primaryHover text-white font-bold rounded-xl transition-colors active:scale-95">
-                                Đã hiểu
-                            </button>
-                        </div>
-                    </div>
                 </form>
             </div>
 
             <!-- FOOTER (Điều khoản bên dưới form) -->
             <p class="mt-6 sm:mt-8 text-xs sm:text-sm text-slate-500 font-medium text-center">
-                Bằng việc đăng nhập, bạn đồng ý với <a href="#"
+                Bằng việc đăng nhập, bạn đồng ý với <a href="terms.html"
                     class="text-brand-primary hover:underline transition-all font-bold">Điều khoản sử dụng</a>
             </p>
         </div>
